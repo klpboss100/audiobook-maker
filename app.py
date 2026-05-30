@@ -429,12 +429,10 @@ with st.sidebar:
     # ── 1. API 설정 (자동저장) ───────────
     st.markdown("<div class='sb-box'><div class='sb-title'>🔑 API 설정</div>",
                 unsafe_allow_html=True)
-    api_key = st.text_input("Gemini API Key", value=cfg.get("api_key",""),
+    api_key = st.text_input("Gemini API Key", value="",
                              type="password", placeholder="AIzaSy...",
                              key="api_key_input")
-    if api_key != cfg.get("api_key",""):
-        cfg["api_key"] = api_key
-        save_config(cfg)
+    st.caption("🔑 매번 입력 필요 · 타인에게 노출되지 않습니다")
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── 2. 프로젝트명 (자동저장) ──────────
