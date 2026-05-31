@@ -23,8 +23,8 @@ MAX_CHUNK_CHARS = 4000
 CONFIG_FILE     = "config.json"
 
 # 남성/여성 목소리 분리
-MALE_VOICES = ["Charon", "Fenrir", "Orus", "Puck", "Schedar", "Gacrux"]
-FEMALE_VOICES = ["Kore", "Aoede", "Zephyr", "Leda", "Zubenelgenubi", "Achernar"]
+MALE_VOICES = ["Charon", "Fenrir", "Orus", "Puck"]
+FEMALE_VOICES = ["Kore", "Aoede", "Zephyr", "Leda"]
 ALL_VOICES = MALE_VOICES + FEMALE_VOICES
 
 MALE_VOICE_HELP   = "Charon=차분·깊음 | Fenrir=강함 | Orus=중성 | Puck=가벼움"
@@ -412,25 +412,22 @@ h1 a, h2 a, h3 a { display: none !important; }
 }
 /* 사이드바 섹션 박스 */
 .sb-box {
-    background:#ffffff;
-    border:1.5px solid #7c3aed;
-    border-radius:8px;
-    padding:7px 10px;
-    margin-bottom:5px;
+    background:#faf8ff;
+    border-left:4px solid #7c3aed;
+    border-radius:0 6px 6px 0;
+    padding:8px 10px 8px 12px;
+    margin-bottom:8px;
 }
 .sb-title {
-    font-size:12px;
-    font-weight:700;
-    color:#7c3aed;
-    margin-bottom:4px;
-    padding-bottom:3px;
-    border-bottom:1px solid #e9d5ff;
+    font-size:14px;
+    font-weight:800;
+    color:#5b21b6;
+    margin-bottom:6px;
+    letter-spacing:-0.3px;
 }
-/* 사이드바 위젯 간격 축소 */
-[data-testid="stSidebar"] .stRadio { margin-top:-8px; }
 [data-testid="stSidebar"] .stSelectbox { margin-top:-4px; }
 [data-testid="stSidebar"] .stTextInput { margin-top:-4px; }
-[data-testid="stSidebar"] .stSlider { margin-top:-4px; }
+[data-testid="stSidebar"] .stSlider { margin-top:-2px; }
 /* 퍼플 포인트 */
 [data-testid="stSidebar"] { background:#fdfaff; }
 </style>
@@ -446,6 +443,19 @@ def step_header(num, title, subtitle=""):
 # ══════════════════════════════════════════
 with st.sidebar:
     cfg = load_config()
+
+    # ── 사이드바 헤더 ────────────────────
+    st.markdown("""
+    <div style='background:linear-gradient(135deg,#7c3aed,#9f5ff0);
+                border-radius:8px;padding:10px 12px;margin-bottom:10px;text-align:center'>
+        <div style='color:white;font-size:15px;font-weight:800;letter-spacing:-0.3px'>
+            ⚙️ 필수 설정
+        </div>
+        <div style='color:#e9d5ff;font-size:11px;margin-top:3px'>
+            아래 설정 후 원고를 입력하세요
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── API 설정 ─────────────────────────
     st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
@@ -637,7 +647,68 @@ st.markdown(
 )
 
 if not api_key:
-    st.info("👈 사이드바에 Gemini API Key를 먼저 입력하세요.")
+    st.markdown("""
+    <div style='background:linear-gradient(135deg,#faf5ff,#f3e8ff);
+                border:2px solid #7c3aed;border-radius:12px;
+                padding:20px 24px;margin-bottom:16px'>
+        <div style='font-size:18px;font-weight:800;color:#5b21b6;margin-bottom:12px'>
+            👋 처음 오셨나요? 시작 방법을 안내해 드립니다
+        </div>
+        <table style='width:100%;border-collapse:collapse'>
+            <tr>
+                <td style='width:25%;padding:6px 8px;vertical-align:top'>
+                    <div style='background:#7c3aed;color:white;border-radius:50%;
+                                width:28px;height:28px;text-align:center;
+                                line-height:28px;font-weight:800;font-size:14px;
+                                display:inline-block'>1</div>
+                    <div style='font-size:12px;font-weight:700;color:#5b21b6;margin-top:4px'>API Key 입력</div>
+                    <div style='font-size:11px;color:#666;margin-top:2px'>
+                        왼쪽 사이드바<br>🔑 필수 설정에서<br>Gemini API Key 입력
+                    </div>
+                </td>
+                <td style='width:25%;padding:6px 8px;vertical-align:top'>
+                    <div style='background:#7c3aed;color:white;border-radius:50%;
+                                width:28px;height:28px;text-align:center;
+                                line-height:28px;font-weight:800;font-size:14px;
+                                display:inline-block'>2</div>
+                    <div style='font-size:12px;font-weight:700;color:#5b21b6;margin-top:4px'>설정 입력</div>
+                    <div style='font-size:11px;color:#666;margin-top:2px'>
+                        프로젝트명·<br>성우·시대배경<br>선택
+                    </div>
+                </td>
+                <td style='width:25%;padding:6px 8px;vertical-align:top'>
+                    <div style='background:#7c3aed;color:white;border-radius:50%;
+                                width:28px;height:28px;text-align:center;
+                                line-height:28px;font-weight:800;font-size:14px;
+                                display:inline-block'>3</div>
+                    <div style='font-size:12px;font-weight:700;color:#5b21b6;margin-top:4px'>원고 입력</div>
+                    <div style='font-size:11px;color:#666;margin-top:2px'>
+                        소설 원고를<br>아래 입력창에<br>붙여넣기
+                    </div>
+                </td>
+                <td style='width:25%;padding:6px 8px;vertical-align:top'>
+                    <div style='background:#7c3aed;color:white;border-radius:50%;
+                                width:28px;height:28px;text-align:center;
+                                line-height:28px;font-weight:800;font-size:14px;
+                                display:inline-block'>4</div>
+                    <div style='font-size:12px;font-weight:700;color:#5b21b6;margin-top:4px'>오디오 생성</div>
+                    <div style='font-size:11px;color:#666;margin-top:2px'>
+                        품질검사→<br>태그변환→<br>오디오 완성
+                    </div>
+                </td>
+            </tr>
+        </table>
+        <div style='margin-top:12px;padding-top:10px;border-top:1px solid #e9d5ff;
+                    font-size:11px;color:#7c3aed'>
+            🔑 API Key 무료 발급:
+            <a href='https://aistudio.google.com/apikey' target='_blank'
+               style='color:#7c3aed;font-weight:700'>
+                aistudio.google.com/apikey
+            </a>
+            &nbsp;(구글 계정 필요)
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 col_q1, col_q2 = st.columns(2)
 with col_q1:
