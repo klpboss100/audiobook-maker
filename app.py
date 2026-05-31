@@ -411,23 +411,35 @@ h1 a, h2 a, h3 a { display: none !important; }
     margin:20px 0 8px 0;
 }
 /* 사이드바 섹션 박스 */
-.sb-box {
-    background:#faf8ff;
-    border-left:4px solid #7c3aed;
-    border-radius:0 6px 6px 0;
-    padding:8px 10px 8px 12px;
-    margin-bottom:8px;
+/* 사이드바 카드 */
+.sb-card {
+    border-radius:10px;
+    margin-bottom:10px;
+    box-shadow:0 2px 8px rgba(124,58,237,0.12);
+    overflow:hidden;
+    border:1px solid #e9d5ff;
 }
-.sb-title {
-    font-size:14px;
+.sb-card-header {
+    padding:8px 12px;
+    font-size:13px;
     font-weight:800;
-    color:#5b21b6;
-    margin-bottom:6px;
-    letter-spacing:-0.3px;
+    color:white;
+    letter-spacing:-0.2px;
 }
+.sb-card-body {
+    background:white;
+    padding:8px 10px;
+}
+/* 섹션별 헤더 색상 */
+.h-api    { background:linear-gradient(90deg,#7c3aed,#9f67f5); }
+.h-proj   { background:linear-gradient(90deg,#0369a1,#0ea5e9); }
+.h-voice  { background:linear-gradient(90deg,#065f46,#10b981); }
+.h-novel  { background:linear-gradient(90deg,#92400e,#f59e0b); }
+.h-model  { background:linear-gradient(90deg,#1e1b4b,#4338ca); }
 [data-testid="stSidebar"] .stSelectbox { margin-top:-4px; }
 [data-testid="stSidebar"] .stTextInput { margin-top:-4px; }
-[data-testid="stSidebar"] .stSlider { margin-top:-2px; }
+[data-testid="stSidebar"] .stSlider    { margin-top:-2px; }
+[data-testid="stSidebar"] .stMultiSelect { margin-top:-4px; }
 /* 퍼플 포인트 */
 [data-testid="stSidebar"] { background:#fdfaff; }
 </style>
@@ -474,7 +486,7 @@ with st.sidebar:
         if api_key != cfg.get("api_key",""):
             cfg["api_key"] = api_key
             save_config(cfg)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 프로젝트명 ───────────────────────
     st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
@@ -510,7 +522,7 @@ with st.sidebar:
     if m_voice != m_def or w_voice != w_def:
         cfg["voices"] = speakers
         save_config(cfg)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 소설 설정 ────────────────────────
     st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
@@ -527,7 +539,7 @@ with st.sidebar:
         default=["표준 현대어"], key="novel_style",
         help="복수 선택 가능\n표준 현대어: 일반 소설\n고어/사극체: 하오체 허용\n방언 포함: 사투리 허용\n대화체: 말하듯 쓴 글")
     novel_style = ", ".join(novel_style_list) if novel_style_list else "표준 현대어"
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 모델 설정 (3개 통합) ─────────────
     st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
@@ -547,7 +559,7 @@ with st.sidebar:
     title_pause = st.slider("⏸️ 제목 후 무음", 0.5, 3.0, 1.5, 0.5,
                              format="%.1f초", key="title_pause",
                              help="챕터 제목 후 무음\n추천: 1.5초")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 사용 가이드 (접이식) ─────────────
     with st.expander("📖 사용 가이드", expanded=False):
