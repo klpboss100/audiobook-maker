@@ -449,13 +449,15 @@ with st.sidebar:
         # 웹 환경: 저장 없이 매번 입력
         api_key = st.text_input("Gemini API Key", value="",
                                  type="password", placeholder="AIzaSy...",
-                                 key="api_key_input")
+                                 key="api_key_input",
+                                 help="Google AI Studio에서 무료 발급\nhttps://aistudio.google.com/apikey\n\n입력한 키는 타인에게 노출되지 않습니다")
         st.caption("🔑 매번 입력 필요 · 타인에게 노출되지 않습니다")
     else:
         # 로컬 환경: 저장 기능 있음
         api_key = st.text_input("Gemini API Key", value=cfg.get("api_key",""),
                                  type="password", placeholder="AIzaSy...",
-                                 key="api_key_input")
+                                 key="api_key_input",
+                                 help="Google AI Studio에서 무료 발급\nhttps://aistudio.google.com/apikey")
         if api_key != cfg.get("api_key",""):
             cfg["api_key"] = api_key
             save_config(cfg)
@@ -497,11 +499,13 @@ with st.sidebar:
     with col_m:
         m_voice = st.selectbox("", MALE_VOICES,
                                 index=MALE_VOICES.index(m_def) if m_def in MALE_VOICES else 0,
-                                label_visibility="collapsed", key="voice_M")
+                                label_visibility="collapsed", key="voice_M",
+                                help="Charon: 차분하고 깊은 남성 목소리 (내레이터 추천)\nFenrir: 강하고 힘있는 목소리\nOrus: 중성적이고 안정적\nPuck: 가볍고 젊은 느낌")
     with col_w:
         w_voice = st.selectbox("", FEMALE_VOICES,
                                 index=FEMALE_VOICES.index(w_def) if w_def in FEMALE_VOICES else 0,
-                                label_visibility="collapsed", key="voice_W")
+                                label_visibility="collapsed", key="voice_W",
+                                help="Kore: 감성적이고 따뜻한 여성 목소리 (추천)\nAoede: 서사적이고 명확한 목소리\nZephyr: 부드럽고 자연스러운\nLeda: 따뜻하고 친근한")
 
     col_mh, col_wh = st.columns(2)
     with col_mh:
@@ -527,14 +531,16 @@ with st.sidebar:
     novel_era = st.text_input("시대 배경",
                                value=cfg.get("novel_era","현대"),
                                placeholder="예: 1970년대 한국, 조선시대, 현대",
-                               key="novel_era")
+                               key="novel_era",
+                               help="소설의 시대적 배경을 입력하세요\n\n예시:\n• 1978년 서울\n• 1980년 제주도\n• 조선시대 중기\n• 현대 (2024년)\n\n구체적일수록 품질검사가 정확해집니다")
     if novel_era != cfg.get("novel_era","현대") and not IS_CLOUD:
         cfg["novel_era"] = novel_era
         save_config(cfg)
 
     novel_style = st.radio("문체 스타일",
                             ["표준 현대어", "고어/사극체", "방언 포함", "구어체"],
-                            index=0, key="novel_style")
+                            index=0, key="novel_style",
+                            help="표준 현대어: 일반 현대 소설\n고어/사극체: 하오체, 예스러운 표현 허용\n방언 포함: 사투리 표현 오류 제외\n구어체: 자연스러운 말투 우선")
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── 6. 품질 검사 모델 ────────────────
@@ -565,8 +571,43 @@ with st.sidebar:
     st.markdown("<div class='sb-box'><div class='sb-title'>⏸️ 제목 후 무음</div>",
                 unsafe_allow_html=True)
     title_pause = st.slider("", 0.5, 3.0, 1.5, 0.5,
-                             format="%.1f초", label_visibility="collapsed", key="title_pause")
+                             format="%.1f초", label_visibility="collapsed", key="title_pause",
+                             help="챕터 제목 읽은 후 본문 시작 전 무음 시간\n추천: 1.5초\n짧은 호흡: 0.5~1.0초\n긴 호흡: 2.0~3.0초")
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── 사용 가이드 (접이식) ─────────────
+    with st.expander("📖 사용 가이드", expanded=False):
+        st.markdown("""
+**🚀 빠른 시작**
+1. API Key 입력 (사이드바)
+2. 원고 붙여넣기
+3. 품질 검사 → 수정
+4. 태그 변환
+5. 오디오 생성 → 다운로드
+
+---
+**🔑 API Key 발급**
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+구글 계정으로 무료 발급 가능
+
+---
+**📅 시대 배경 입력 예시**
+- `1978년 서울` → 국민학교 허용
+- `조선시대` → 사극 표현 허용
+- `현대` → 표준 현대어 기준
+
+---
+**🎙️ 성우 추천**
+- 내레이터: Charon (남) / Kore (여)
+- 강한 캐릭터: Fenrir
+- 부드러운 캐릭터: Zephyr
+
+---
+**💡 팁**
+- 품질검사 모델: Pro 사용 권장
+- 태그변환: Flash로도 충분
+- TTS: Flash로 먼저 테스트 후 Pro로 최종 제작
+        """)
 
 
 # ══════════════════════════════════════════
@@ -629,6 +670,9 @@ st.markdown(
     f"<p style='font-size:16px;font-weight:600;color:#7c3aed;margin:4px 0'>글자 수: {char_count:,}자</p>",
     unsafe_allow_html=True
 )
+
+if not api_key:
+    st.info("👈 사이드바에 Gemini API Key를 먼저 입력하세요.")
 
 col_q1, col_q2 = st.columns(2)
 with col_q1:
