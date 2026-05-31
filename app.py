@@ -90,10 +90,21 @@ def save_config(data: dict):
 
 ANALYSIS_PROMPT = """당신은 한국 소설 원고를 검토하는 전문 편집자입니다.
 
-아래 원고를 꼼꼼히 분석하여 3가지를 검사하세요:
+## 소설 배경 정보 (이 정보를 반드시 판단 기준으로 사용하세요)
+- 시대 배경: {era}
+- 문체 스타일: {style}
+
+## 판단 기준
+- 시대 배경에 맞는 단어/표현은 오류로 처리하지 마세요
+  (예: 1970년대면 "국민학교", "전화교환수" 등은 정확한 표현)
+- 문체 스타일이 "고어/사극체"면 하오체, 예스러운 표현은 오류 아님
+- 문체 스타일이 "방언 포함"이면 사투리 표현은 오류 아님
+- 문체 스타일이 "구어체"면 맞춤법보다 자연스러운 말투 우선
+
+## 검사 항목
 1. 어색한 문장: 자연스럽지 않은 표현, 어색한 어휘, 문장 흐름 문제
 2. AI 작성 패턴: AI가 자주 쓰는 상투적 표현, 과도하게 정형화된 문장, 반복되는 구조
-3. 맞춤법/문법: 철자 오류, 문법 오류, 띄어쓰기
+3. 맞춤법/문법: 철자 오류, 문법 오류, 띄어쓰기 (시대/문체 기준 적용)
 
 반드시 아래 JSON 형식으로만 출력하세요 (마크다운 없이):
 {{
@@ -115,13 +126,15 @@ issues가 없으면 빈 배열 [] 반환.
 {manuscript}"""
 
 
-def analyze_manuscript(api_key: str, manuscript: str, model: str) -> dict:
+def analyze_manuscript(api_key: str, manuscript: str, model: str,
+                       era: str = "현대", style: str = "표준 현대어") -> dict:
     """원고 품질 분석"""
     import json as _json
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content(
         model=model,
-        contents=ANALYSIS_PROMPT.format(manuscript=manuscript)
+        contents=ANALYSIS_PROMPT.format(
+            manuscript=manuscript, era=era, style=style)
     )
     text = response.text.strip()
     text = re.sub(r"```json|```", "", text).strip()
@@ -508,7 +521,23 @@ with st.sidebar:
         save_config(cfg)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── 5. 품질 검사 모델 ────────────────
+    # ── 5. 소설 설정 ──────────────────────
+    st.markdown("<div class='sb-box'><div class='sb-title'>📖 소설 설정</div>",
+                unsafe_allow_html=True)
+    novel_era = st.text_input("시대 배경",
+                               value=cfg.get("novel_era","현대"),
+                               placeholder="예: 1970년대 한국, 조선시대, 현대",
+                               key="novel_era")
+    if novel_era != cfg.get("novel_era","현대") and not IS_CLOUD:
+        cfg["novel_era"] = novel_era
+        save_config(cfg)
+
+    novel_style = st.radio("문체 스타일",
+                            ["표준 현대어", "고어/사극체", "방언 포함", "구어체"],
+                            index=0, key="novel_style")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── 6. 품질 검사 모델 ────────────────
     st.markdown("<div class='sb-box'><div class='sb-title'>🔍 품질 검사 모델</div>",
                 unsafe_allow_html=True)
     check_model = st.radio("", ["gemini-2.5-pro","gemini-2.5-flash"],
@@ -609,7 +638,8 @@ with col_q1:
                  disabled=not (api_key and has_text), use_container_width=True):
         with st.spinner("Gemini가 원고 분석 중... (30초~1분)"):
             try:
-                result = analyze_manuscript(api_key, manuscript, check_model)
+                result = analyze_manuscript(api_key, manuscript, check_model,
+                                        era=novel_era, style=novel_style)
                 st.session_state['analysis_result'] = result
                 st.session_state['analysis_text'] = manuscript
                 st.session_state['accepted_fixes'] = {}
