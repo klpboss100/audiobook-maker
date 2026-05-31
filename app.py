@@ -508,7 +508,15 @@ with st.sidebar:
         save_config(cfg)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── 5. 태그 변환 모델 (자동저장) ─────
+    # ── 5. 품질 검사 모델 ────────────────
+    st.markdown("<div class='sb-box'><div class='sb-title'>🔍 품질 검사 모델</div>",
+                unsafe_allow_html=True)
+    check_model = st.radio("", ["gemini-2.5-pro","gemini-2.5-flash"],
+                            captions=["정확도 우선 (추천)","빠른 검사"],
+                            index=0, label_visibility="collapsed", key="check_model")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── 6. 태그 변환 모델 ────────────────
     st.markdown("<div class='sb-box'><div class='sb-title'>🤖 태그 변환 모델</div>",
                 unsafe_allow_html=True)
     tag_model = st.radio("", ["gemini-2.5-flash","gemini-2.5-pro"],
@@ -601,7 +609,7 @@ with col_q1:
                  disabled=not (api_key and has_text), use_container_width=True):
         with st.spinner("Gemini가 원고 분석 중... (30초~1분)"):
             try:
-                result = analyze_manuscript(api_key, manuscript, tag_model)
+                result = analyze_manuscript(api_key, manuscript, check_model)
                 st.session_state['analysis_result'] = result
                 st.session_state['analysis_text'] = manuscript
                 st.session_state['accepted_fixes'] = {}
