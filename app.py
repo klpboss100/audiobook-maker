@@ -413,19 +413,24 @@ h1 a, h2 a, h3 a { display: none !important; }
 /* 사이드바 섹션 박스 */
 .sb-box {
     background:#ffffff;
-    border:2px solid #7c3aed;
-    border-radius:10px;
-    padding:12px 14px;
-    margin-bottom:12px;
+    border:1.5px solid #7c3aed;
+    border-radius:8px;
+    padding:7px 10px;
+    margin-bottom:5px;
 }
 .sb-title {
-    font-size:13px;
+    font-size:12px;
     font-weight:700;
     color:#7c3aed;
-    margin-bottom:8px;
-    padding-bottom:6px;
+    margin-bottom:4px;
+    padding-bottom:3px;
     border-bottom:1px solid #e9d5ff;
 }
+/* 사이드바 위젯 간격 축소 */
+[data-testid="stSidebar"] .stRadio { margin-top:-8px; }
+[data-testid="stSidebar"] .stSelectbox { margin-top:-4px; }
+[data-testid="stSidebar"] .stTextInput { margin-top:-4px; }
+[data-testid="stSidebar"] .stSlider { margin-top:-4px; }
 /* 퍼플 포인트 */
 [data-testid="stSidebar"] { background:#fdfaff; }
 </style>
@@ -442,137 +447,96 @@ def step_header(num, title, subtitle=""):
 with st.sidebar:
     cfg = load_config()
 
-    # ── 1. API 설정 (자동저장) ───────────
-    st.markdown("<div class='sb-box'><div class='sb-title'>🔑 API 설정</div>",
+    # ── API 설정 ─────────────────────────
+    st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
+    st.markdown("<div class='sb-title'>🔑 API 설정 (Gemini · 타인 노출 주의)</div>",
                 unsafe_allow_html=True)
     if IS_CLOUD:
-        # 웹 환경: 저장 없이 매번 입력
-        api_key = st.text_input("Gemini API Key", value="",
-                                 type="password", placeholder="AIzaSy...",
+        api_key = st.text_input("", value="", type="password",
+                                 placeholder="AIzaSy...", label_visibility="collapsed",
                                  key="api_key_input",
-                                 help="Google AI Studio에서 무료 발급\nhttps://aistudio.google.com/apikey\n\n입력한 키는 타인에게 노출되지 않습니다")
-        st.caption("🔑 매번 입력 필요 · 타인에게 노출되지 않습니다")
+                                 help="Google AI Studio 무료 발급\nhttps://aistudio.google.com/apikey\n입력 키는 타인에게 노출되지 않습니다")
     else:
-        # 로컬 환경: 저장 기능 있음
-        api_key = st.text_input("Gemini API Key", value=cfg.get("api_key",""),
-                                 type="password", placeholder="AIzaSy...",
+        api_key = st.text_input("", value=cfg.get("api_key",""), type="password",
+                                 placeholder="AIzaSy...", label_visibility="collapsed",
                                  key="api_key_input",
-                                 help="Google AI Studio에서 무료 발급\nhttps://aistudio.google.com/apikey")
+                                 help="Google AI Studio 무료 발급\nhttps://aistudio.google.com/apikey")
         if api_key != cfg.get("api_key",""):
             cfg["api_key"] = api_key
             save_config(cfg)
-        st.caption("💾 자동저장됨 (로컬 전용)")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── 2. 프로젝트명 (자동저장) ──────────
-    st.markdown("<div class='sb-box'><div class='sb-title'>📁 프로젝트명</div>",
-                unsafe_allow_html=True)
+    # ── 프로젝트명 ───────────────────────
+    st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
+    st.markdown("<div class='sb-title'>📁 프로젝트명</div>", unsafe_allow_html=True)
     proj_default = "" if IS_CLOUD else cfg.get("project_name","")
     project_name = st.text_input("", value=proj_default,
                                   placeholder="예: 제1부_봄의시작",
                                   label_visibility="collapsed", key="project_name_input")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 소설 유형은 태그에 영향 없으므로 고정값 사용
     selected_preset = "일반소설"
 
-    # ── 3. 성우 설정 (자동저장 + 수평정렬) ─
-    st.markdown("<div class='sb-box'><div class='sb-title'>🎙️ 성우 설정</div>",
-                unsafe_allow_html=True)
+    # ── 성우 설정 ────────────────────────
+    st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
+    st.markdown("<div class='sb-title'>🎙️ 성우 설정</div>", unsafe_allow_html=True)
     saved_voices = cfg.get("voices", {"M":"Charon","W":"Kore"})
     m_def = saved_voices.get("M","Charon")
     w_def = saved_voices.get("W","Kore")
-
-    st.markdown("""
-    <table style='width:100%;border-collapse:collapse'>
-      <tr>
-        <td style='width:50%;padding:0 4px 4px 0;font-size:12px;font-weight:600;color:#1a56db'>
-          🔵 남성(M)
-        </td>
-        <td style='width:50%;padding:0 0 4px 4px;font-size:12px;font-weight:600;color:#e02424'>
-          🔴 여성(W)
-        </td>
-      </tr>
-    </table>""", unsafe_allow_html=True)
-
     col_m, col_w = st.columns(2)
     with col_m:
+        st.caption("🔵 남성(M)")
         m_voice = st.selectbox("", MALE_VOICES,
                                 index=MALE_VOICES.index(m_def) if m_def in MALE_VOICES else 0,
                                 label_visibility="collapsed", key="voice_M",
-                                help="Charon: 차분하고 깊은 남성 목소리 (내레이터 추천)\nFenrir: 강하고 힘있는 목소리\nOrus: 중성적이고 안정적\nPuck: 가볍고 젊은 느낌")
+                                help="Charon: 차분·깊음 (내레이터 추천)\nFenrir: 강하고 힘있음\nOrus: 중성적·안정적\nPuck: 가볍고 젊음\nSchedar/Gacrux: 특수 톤")
     with col_w:
+        st.caption("🔴 여성(W)")
         w_voice = st.selectbox("", FEMALE_VOICES,
                                 index=FEMALE_VOICES.index(w_def) if w_def in FEMALE_VOICES else 0,
                                 label_visibility="collapsed", key="voice_W",
-                                help="Kore: 감성적이고 따뜻한 여성 목소리 (추천)\nAoede: 서사적이고 명확한 목소리\nZephyr: 부드럽고 자연스러운\nLeda: 따뜻하고 친근한")
-
-    col_mh, col_wh = st.columns(2)
-    with col_mh:
-        st.markdown(
-            "<div style='font-size:13px;color:#555;line-height:1.6'>"
-            "Charon=차분<br>Fenrir=강함<br>Orus=중성<br>Puck=가벼움"
-            "</div>", unsafe_allow_html=True)
-    with col_wh:
-        st.markdown(
-            "<div style='font-size:13px;color:#555;line-height:1.6'>"
-            "Kore=감성<br>Aoede=서사<br>Zephyr=부드러움<br>Leda=따뜻함"
-            "</div>", unsafe_allow_html=True)
-
+                                help="Kore: 감성적·따뜻함 (추천)\nAoede: 서사적·명확\nZephyr: 부드럽고 자연스러움\nLeda: 따뜻하고 친근")
     speakers = {"M": m_voice, "W": w_voice}
     if m_voice != m_def or w_voice != w_def:
         cfg["voices"] = speakers
         save_config(cfg)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── 5. 소설 설정 ──────────────────────
-    st.markdown("<div class='sb-box'><div class='sb-title'>📖 소설 설정</div>",
-                unsafe_allow_html=True)
-    novel_era = st.text_input("시대 배경",
-                               value=cfg.get("novel_era","현대"),
-                               placeholder="예: 1970년대 한국, 조선시대, 현대",
+    # ── 소설 설정 ────────────────────────
+    st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
+    st.markdown("<div class='sb-title'>📖 소설 설정</div>", unsafe_allow_html=True)
+    novel_era = st.text_input("시대 배경", value=cfg.get("novel_era","현대"),
+                               placeholder="예: 1978년 서울, 조선시대",
                                key="novel_era",
-                               help="소설의 시대적 배경을 입력하세요\n\n예시:\n• 1978년 서울\n• 1980년 제주도\n• 조선시대 중기\n• 현대 (2024년)\n\n구체적일수록 품질검사가 정확해집니다")
+                               help="구체적일수록 품질검사 정확도↑\n\n예시:\n• 1978년 서울\n• 1980년 제주도\n• 조선시대 중기\n• 현대 2024년")
     if novel_era != cfg.get("novel_era","현대") and not IS_CLOUD:
         cfg["novel_era"] = novel_era
         save_config(cfg)
-
-    novel_style = st.radio("문체 스타일",
-                            ["표준 현대어", "고어/사극체", "방언 포함", "구어체"],
-                            index=0, key="novel_style",
-                            help="표준 현대어: 일반 현대 소설\n고어/사극체: 하오체, 예스러운 표현 허용\n방언 포함: 사투리 표현 오류 제외\n구어체: 자연스러운 말투 우선")
+    novel_style_list = st.multiselect("문체 스타일",
+        ["표준 현대어","고어/사극체","방언 포함","대화체"],
+        default=["표준 현대어"], key="novel_style",
+        help="복수 선택 가능\n표준 현대어: 일반 소설\n고어/사극체: 하오체 허용\n방언 포함: 사투리 허용\n대화체: 말하듯 쓴 글")
+    novel_style = ", ".join(novel_style_list) if novel_style_list else "표준 현대어"
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── 6. 품질 검사 모델 ────────────────
-    st.markdown("<div class='sb-box'><div class='sb-title'>🔍 품질 검사 모델</div>",
-                unsafe_allow_html=True)
-    check_model = st.radio("", ["gemini-2.5-pro","gemini-2.5-flash"],
-                            captions=["정확도 우선 (추천)","빠른 검사"],
-                            index=0, label_visibility="collapsed", key="check_model")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── 6. 태그 변환 모델 ────────────────
-    st.markdown("<div class='sb-box'><div class='sb-title'>🤖 태그 변환 모델</div>",
-                unsafe_allow_html=True)
-    tag_model = st.radio("", ["gemini-2.5-flash","gemini-2.5-pro"],
-                          captions=["빠름","고품질"], index=0,
-                          label_visibility="collapsed", key="tag_model")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── 6. TTS 오디오 모델 (자동저장) ────
-    st.markdown("<div class='sb-box'><div class='sb-title'>🔊 TTS 오디오 모델</div>",
-                unsafe_allow_html=True)
-    tts_model = st.radio("", ["gemini-2.5-flash-preview-tts","gemini-2.5-pro-preview-tts"],
-                          captions=["빠름·저비용","고품질"], index=0,
-                          label_visibility="collapsed", key="tts_model")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── 7. 제목 후 무음 ──────────────────
-    st.markdown("<div class='sb-box'><div class='sb-title'>⏸️ 제목 후 무음</div>",
-                unsafe_allow_html=True)
-    title_pause = st.slider("", 0.5, 3.0, 1.5, 0.5,
-                             format="%.1f초", label_visibility="collapsed", key="title_pause",
-                             help="챕터 제목 읽은 후 본문 시작 전 무음 시간\n추천: 1.5초\n짧은 호흡: 0.5~1.0초\n긴 호흡: 2.0~3.0초")
+    # ── 모델 설정 (3개 통합) ─────────────
+    st.markdown("<div class='sb-box'>", unsafe_allow_html=True)
+    st.markdown("<div class='sb-title'>⚙️ 모델 설정</div>", unsafe_allow_html=True)
+    check_model = st.selectbox("🔍 품질검사",
+        ["gemini-2.5-pro","gemini-2.5-flash"],
+        index=0, key="check_model",
+        help="Pro: 정확도 우선 (추천)\nFlash: 빠른 검사")
+    tag_model = st.selectbox("🤖 태그변환",
+        ["gemini-2.5-flash","gemini-2.5-pro"],
+        index=0, key="tag_model",
+        help="Flash: 빠르고 충분한 품질 (추천)\nPro: 더 정교한 태그")
+    tts_model = st.selectbox("🔊 TTS 오디오",
+        ["gemini-2.5-flash-preview-tts","gemini-2.5-pro-preview-tts"],
+        index=0, key="tts_model",
+        help="Flash: 빠름·저비용 (테스트용)\nPro: 고품질 (최종 제작용)")
+    title_pause = st.slider("⏸️ 제목 후 무음", 0.5, 3.0, 1.5, 0.5,
+                             format="%.1f초", key="title_pause",
+                             help="챕터 제목 후 무음\n추천: 1.5초")
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── 사용 가이드 (접이식) ─────────────
@@ -595,6 +559,7 @@ with st.sidebar:
 - `1978년 서울` → 국민학교 허용
 - `조선시대` → 사극 표현 허용
 - `현대` → 표준 현대어 기준
+- 문체는 복수 선택 가능 (예: 표준+대화체)
 
 ---
 **🎙️ 성우 추천**
