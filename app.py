@@ -721,11 +721,16 @@ if 'analysis_result' in st.session_state and 'manuscript_checked' not in st.sess
                     st.markdown(
                         f"<div style='background:{'#ebf8ff' if is_sel else '#fff5f5'};"
                         f"border:{'2px solid #2b6cb0' if is_sel else '1px solid #feb2b2'};"
-                        f"border-radius:8px;padding:8px;min-height:70px;font-size:13px'>"
-                        f"<b style='color:#2d3748'>원본</b><br>"
-                        f"<span style='color:#c53030'>{orig}</span></div>",
+                        f"border-radius:8px;padding:8px 8px 4px;font-size:13px'>"
+                        f"<b style='color:#2d3748'>원본</b></div>",
                         unsafe_allow_html=True
                     )
+                    st.text_area("",
+                        value=orig,
+                        height=80,
+                        disabled=True,
+                        label_visibility="collapsed",
+                        key=f"orig_disp_{i}")
                     if st.button("👆 원본 선택", key=f"sel_o_{i}", use_container_width=True):
                         accepted[i] = {'type':'original','text':orig,'original':orig}
                         st.session_state['accepted_fixes'] = accepted
