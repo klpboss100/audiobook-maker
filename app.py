@@ -9,6 +9,9 @@
 import streamlit as st
 import streamlit.components.v1
 import re, io, wave, time, json, os, pickle
+
+# 환경 자동 감지: Streamlit Cloud = /home/appuser
+IS_CLOUD = os.environ.get('HOME', '') == '/home/appuser' 
 from google import genai
 from google.genai import types
 
@@ -429,16 +432,28 @@ with st.sidebar:
     # ── 1. API 설정 (자동저장) ───────────
     st.markdown("<div class='sb-box'><div class='sb-title'>🔑 API 설정</div>",
                 unsafe_allow_html=True)
-    api_key = st.text_input("Gemini API Key", value="",
-                             type="password", placeholder="AIzaSy...",
-                             key="api_key_input")
-    st.caption("🔑 매번 입력 필요 · 타인에게 노출되지 않습니다")
+    if IS_CLOUD:
+        # 웹 환경: 저장 없이 매번 입력
+        api_key = st.text_input("Gemini API Key", value="",
+                                 type="password", placeholder="AIzaSy...",
+                                 key="api_key_input")
+        st.caption("🔑 매번 입력 필요 · 타인에게 노출되지 않습니다")
+    else:
+        # 로컬 환경: 저장 기능 있음
+        api_key = st.text_input("Gemini API Key", value=cfg.get("api_key",""),
+                                 type="password", placeholder="AIzaSy...",
+                                 key="api_key_input")
+        if api_key != cfg.get("api_key",""):
+            cfg["api_key"] = api_key
+            save_config(cfg)
+        st.caption("💾 자동저장됨 (로컬 전용)")
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── 2. 프로젝트명 (자동저장) ──────────
     st.markdown("<div class='sb-box'><div class='sb-title'>📁 프로젝트명</div>",
                 unsafe_allow_html=True)
-    project_name = st.text_input("", value="",
+    proj_default = "" if IS_CLOUD else cfg.get("project_name","")
+    project_name = st.text_input("", value=proj_default,
                                   placeholder="예: 제1부_봄의시작",
                                   label_visibility="collapsed", key="project_name_input")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -716,40 +731,49 @@ if 'analysis_result' in st.session_state and 'manuscript_checked' not in st.sess
                         st.session_state['accepted_fixes'] = accepted
                         st.rerun()
 
-                # 제안 카드
+                # 제안 카드 (수정 가능)
                 with cs:
                     is_sel = sel_type == "suggestion"
                     st.markdown(
                         f"<div style='background:{'#f0fff4' if is_sel else '#f9fff9'};"
                         f"border:{'2px solid #276749' if is_sel else '1px solid #9ae6b4'};"
-                        f"border-radius:8px;padding:8px;min-height:70px;font-size:13px'>"
-                        f"<b style='color:#2d3748'>제안</b><br>"
-                        f"<span style='color:#276749'>{sugg}</span></div>",
+                        f"border-radius:8px;padding:8px 8px 4px;font-size:13px'>"
+                        f"<b style='color:#2d3748'>제안</b> "
+                        f"<span style='font-size:11px;color:#888'>(수정 가능)</span></div>",
                         unsafe_allow_html=True
                     )
+                    sugg_edited = st.text_area("",
+                        value=cur.get('text', sugg) if is_sel else sugg,
+                        height=80,
+                        label_visibility="collapsed",
+                        key=f"sugg_inp_{i}")
                     if st.button("✅ 제안 선택", key=f"sel_s_{i}", use_container_width=True):
-                        accepted[i] = {'type':'suggestion','text':sugg,'original':orig}
+                        accepted[i] = {'type':'suggestion','text':sugg_edited,'original':orig}
                         st.session_state['accepted_fixes'] = accepted
                         st.rerun()
 
-                # 직접 수정 카드 (버튼 없이 입력 후 자동저장)
+                # 직접 수정 카드 - 원본/제안과 동일 디자인
                 with cc:
                     is_sel   = sel_type == "custom"
                     cust_val = cur.get('text','') if is_sel else ''
                     st.markdown(
                         f"<div style='background:{'#fffbeb' if is_sel else '#fff'};"
-                        f"border:{'2px solid #d97706' if is_sel else '1px solid #ddd'};"
+                        f"border:{'2px solid #d97706' if is_sel else '1px solid #fde68a'};"
                         f"border-radius:8px;padding:8px 8px 4px;font-size:13px'>"
-                        f"<b style='color:#2d3748'>✏️ 직접 수정</b>"
-                        f"{'<br><span style="color:#d97706;font-size:11px">저장됨</span>' if is_sel else ''}"
-                        f"</div>",
+                        f"<b style='color:#2d3748'>직접 수정</b></div>",
                         unsafe_allow_html=True
                     )
-                    st.text_input("", value=cust_val,
-                                  placeholder="입력하면 자동저장...",
-                                  label_visibility="collapsed",
-                                  key=f"custom_inp_{i}",
-                                  on_change=make_custom_cb(i, orig))
+                    cust_input = st.text_area("",
+                        value=cust_val,
+                        height=80,
+                        placeholder="직접 입력...",
+                        label_visibility="collapsed",
+                        key=f"custom_inp_{i}")
+                    if st.button("✏️ 직접수정 선택", key=f"sel_c_{i}", use_container_width=True):
+                        if cust_input.strip():
+                            accepted[i] = {'type':'custom','text':cust_input,'original':orig}
+                            st.session_state['accepted_fixes'] = accepted
+                            st.rerun()
 
         st.markdown("---")
         applied = len(accepted)
@@ -774,6 +798,11 @@ if 'manuscript_checked' in st.session_state:
     checked = st.session_state['manuscript_checked']
     st.text_area("", value=checked, height=200,
                  label_visibility="collapsed", key="checked_display")
+    checked_count = len(checked)
+    st.markdown(
+        f"<p style='font-size:16px;font-weight:600;color:#7c3aed;margin:4px 0'>글자 수: {checked_count:,}자</p>",
+        unsafe_allow_html=True
+    )
 
     c1, c2, c3 = st.columns(3)
     with c1:
