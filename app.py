@@ -785,7 +785,8 @@ with col_q1:
     btn_label = "🔍 품질 검사 시작" if has_text else "✏️ 원고를 먼저 입력하세요"
     if st.button(btn_label, type="primary" if has_text else "secondary",
                  disabled=not (api_key and has_text), use_container_width=True):
-        with st.spinner("Gemini가 원고 분석 중... (30초~1분)"):
+        with st.status("🔍 원고 품질 분석 중...", expanded=True) as status:
+            st.write("Gemini가 문장을 분석하고 있습니다. (30초~1분 소요)")
             try:
                 result = analyze_manuscript(api_key, manuscript, check_model,
                                         era=novel_era, style=novel_style)
@@ -793,7 +794,10 @@ with col_q1:
                 st.session_state['analysis_text'] = manuscript
                 st.session_state['accepted_fixes'] = {}
                 st.session_state.pop('manuscript_checked', None)
+                issues_count = len(result.get('issues', []))
+                status.update(label=f"✅ 분석 완료 — {issues_count}개 발견", state="complete")
             except Exception as e:
+                status.update(label=f"❌ 오류 발생", state="error")
                 st.error(f"❌ {e}")
 with col_q2:
     if st.button("⏭️ 검사 건너뛰기",
@@ -812,9 +816,8 @@ if 'analysis_result' in st.session_state and 'manuscript_checked' not in st.sess
         st.info(f"📊 {summary}")
 
     if not issues:
-        st.success("✅ 문제없음! 자동으로 다음 단계로 이동합니다.")
+        st.success("✅ 문제없음! 아래 단계로 진행하세요.")
         st.session_state['manuscript_checked'] = st.session_state['analysis_text']
-        st.rerun()
     else:
         types = [i.get('type','') for i in issues]
         c1, c2, c3, c4 = st.columns(4)
@@ -1005,14 +1008,16 @@ if 'manuscript_checked' in st.session_state:
     with c2:
         if st.button("🔄 태그 변환 시작", type="primary",
                      disabled=not api_key, use_container_width=True):
-            with st.spinner("태그 변환 중... (30초~1분)"):
+            with st.status("🤖 태그 변환 중...", expanded=True) as status:
+                st.write("Gemini가 화자와 감정 태그를 분석합니다. (30초~1분 소요)")
                 try:
                     tags = PRESETS.get(selected_preset, PRESETS["일반소설"]).get("tags","")
                     tagged = convert_tags(api_key, checked, tag_model, speakers, tags)
                     st.session_state['tagged_script'] = normalize_tags(tagged)
                     st.session_state.pop('audio_data', None)
-                    st.rerun()
+                    status.update(label="✅ 태그 변환 완료", state="complete")
                 except Exception as e:
+                    status.update(label="❌ 오류 발생", state="error")
                     st.error(f"❌ {e}")
     with c3:
         if st.button("📋 태그 직접 입력", use_container_width=True):
