@@ -216,18 +216,28 @@ def normalize_tags(text: str) -> str:
     return text
 
 def parse_tagged_script(text):
+    """순서 유지하며 태그줄 + 구분선 모두 파싱"""
     text = normalize_tags(text)
     lines = []
+    tag_pattern = re.compile(r'^\[([A-Za-z가-힣]+)\]\s*\[([^\]]+)\]\s*(.+)$')
+    sep_pattern  = re.compile(r'^[-_═=─]{3,}\s*$')
     for raw_line in text.split('\n'):
         stripped = raw_line.strip()
-        # 구분선 감지: ----, ____, ════ 등
-        if stripped and all(c in '-_═=─' for c in stripped) and len(stripped) >= 3:
+        if not stripped:
+            continue
+        # 구분선 감지
+        if sep_pattern.match(stripped):
             lines.append({'speaker': 'PAUSE', 'emotion': 'pause', 'text': ''})
             continue
-    pattern = re.compile(r'^\[([A-Za-z가-힣]+)\]\s*\[([^\]]+)\]\s*(.+)$', re.MULTILINE)
-    for match in pattern.finditer(text):
-        speaker, emotion, content = match.groups()
-        lines.append({'speaker': speaker.strip(), 'emotion': emotion.strip(), 'text': content.strip()})
+        # 태그 라인 감지
+        m = tag_pattern.match(stripped)
+        if m:
+            speaker, emotion, content = m.groups()
+            lines.append({
+                'speaker': speaker.strip(),
+                'emotion': emotion.strip(),
+                'text':    content.strip()
+            })
     return lines
 
 
