@@ -218,6 +218,12 @@ def normalize_tags(text: str) -> str:
 def parse_tagged_script(text):
     text = normalize_tags(text)
     lines = []
+    for raw_line in text.split('\n'):
+        stripped = raw_line.strip()
+        # 구분선 감지: ----, ____, ════ 등
+        if stripped and all(c in '-_═=─' for c in stripped) and len(stripped) >= 3:
+            lines.append({'speaker': 'PAUSE', 'emotion': 'pause', 'text': ''})
+            continue
     pattern = re.compile(r'^\[([A-Za-z가-힣]+)\]\s*\[([^\]]+)\]\s*(.+)$', re.MULTILINE)
     for match in pattern.finditer(text):
         speaker, emotion, content = match.groups()
@@ -232,15 +238,24 @@ def group_into_segments(lines):
     cur_spk = lines[0]['speaker']
     cur_lines = [lines[0]]
     for line in lines[1:]:
-        if line['speaker'] == cur_spk:
+        # PAUSE는 항상 독립 세그먼트
+        if line['emotion'] == 'pause' or cur_lines[-1].get('emotion') == 'pause':
+            segments.append({'speaker': cur_spk, 'lines': cur_lines,
+                             'is_title': any(l['emotion'] == 'title' for l in cur_lines),
+                             'is_pause': cur_lines[-1].get('emotion') == 'pause'})
+            cur_spk = line['speaker']
+            cur_lines = [line]
+        elif line['speaker'] == cur_spk:
             cur_lines.append(line)
         else:
             segments.append({'speaker': cur_spk, 'lines': cur_lines,
-                             'is_title': any(l['emotion'] == 'title' for l in cur_lines)})
+                             'is_title': any(l['emotion'] == 'title' for l in cur_lines),
+                             'is_pause': False})
             cur_spk = line['speaker']
             cur_lines = [line]
     segments.append({'speaker': cur_spk, 'lines': cur_lines,
-                    'is_title': any(l['emotion'] == 'title' for l in cur_lines)})
+                    'is_title': any(l['emotion'] == 'title' for l in cur_lines),
+                    'is_pause': cur_lines[-1].get('emotion') == 'pause'})
     return segments
 
 
@@ -289,12 +304,11 @@ def chunk_segment(segment_lines):
 
 
 def build_single_speaker_script(lines, voice_hint=""):
-    """목소리 일관성 지시문 포함한 TTS 스크립트 생성"""
+    """TTS 스크립트 생성 (pause 제외)"""
     parts = []
-    # 목소리 일관성 앵커 (청크마다 동일한 톤 유지)
-    if voice_hint:
-        parts.append(f"[{voice_hint} 목소리로 일관되게 읽어주세요]")
     for line in lines:
+        if line.get('emotion') == 'pause':
+            continue
         if line['emotion'] in ('narration', 'title'):
             parts.append(line['text'])
         else:
