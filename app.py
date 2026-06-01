@@ -451,7 +451,6 @@ h1 a, h2 a, h3 a { display: none !important; }
     letter-spacing:-0.2px;
 }
 .sb-card-body {
-    background:white;
     padding:8px 10px;
 }
 /* 섹션별 헤더 색상 */
@@ -465,7 +464,7 @@ h1 a, h2 a, h3 a { display: none !important; }
 [data-testid="stSidebar"] .stSlider    { margin-top:-2px; }
 [data-testid="stSidebar"] .stMultiSelect { margin-top:-4px; }
 /* 퍼플 포인트 */
-[data-testid="stSidebar"] { background:#fdfaff; }
+[data-testid="stSidebar"] { background:var(--secondary-background-color); }
 
 /* 사이드바 입력칸 - 라이트/다크 모두 대응 */
 [data-testid="stSidebar"] input[type="text"],
@@ -575,9 +574,9 @@ with st.sidebar:
     }
     col_md, col_wd = st.columns(2)
     with col_md:
-        st.markdown(f"<div style='font-size:10px;color:#065f46;background:#d1fae5;border-radius:4px;padding:3px 6px'>{voice_desc.get(m_voice,'')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:10px;color:#065f46;border:1px solid #10b981;border-radius:4px;padding:3px 6px'>{voice_desc.get(m_voice,'')}</div>", unsafe_allow_html=True)
     with col_wd:
-        st.markdown(f"<div style='font-size:10px;color:#065f46;background:#d1fae5;border-radius:4px;padding:3px 6px'>{voice_desc.get(w_voice,'')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:10px;color:#065f46;border:1px solid #10b981;border-radius:4px;padding:3px 6px'>{voice_desc.get(w_voice,'')}</div>", unsafe_allow_html=True)
     speakers = {"M": m_voice, "W": w_voice}
     if m_voice != m_def or w_voice != w_def:
         cfg["voices"] = speakers
