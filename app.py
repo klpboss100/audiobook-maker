@@ -574,9 +574,9 @@ with st.sidebar:
     }
     col_md, col_wd = st.columns(2)
     with col_md:
-        st.markdown(f"<div style='font-size:10px;color:#065f46;border:1px solid #10b981;border-radius:4px;padding:3px 6px'>{voice_desc.get(m_voice,'')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:11px;font-weight:600;color:#6ee7b7;background:rgba(16,185,129,0.15);border:1px solid #6ee7b7;border-radius:4px;padding:4px 7px'>{voice_desc.get(m_voice,'')}</div>", unsafe_allow_html=True)
     with col_wd:
-        st.markdown(f"<div style='font-size:10px;color:#065f46;border:1px solid #10b981;border-radius:4px;padding:3px 6px'>{voice_desc.get(w_voice,'')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:11px;font-weight:600;color:#6ee7b7;background:rgba(16,185,129,0.15);border:1px solid #6ee7b7;border-radius:4px;padding:4px 7px'>{voice_desc.get(w_voice,'')}</div>", unsafe_allow_html=True)
     speakers = {"M": m_voice, "W": w_voice}
     if m_voice != m_def or w_voice != w_def:
         cfg["voices"] = speakers
