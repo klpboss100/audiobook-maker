@@ -443,33 +443,27 @@ h1 a, h2 a, h3 a { display: none !important; }
 /* 퍼플 포인트 */
 [data-testid="stSidebar"] { background:#fdfaff; }
 
-/* 사이드바 입력칸 배경 - 잘 보이게 */
+/* 사이드바 입력칸 - 라이트/다크 모두 대응 */
 [data-testid="stSidebar"] input[type="text"],
 [data-testid="stSidebar"] input[type="password"] {
-    background:#eff6ff !important;
-    border:1.5px solid #93c5fd !important;
+    border:1.5px solid #7c3aed !important;
     border-radius:6px !important;
-    color:#1e3a5f !important;
 }
 [data-testid="stSidebar"] input[type="text"]:focus,
 [data-testid="stSidebar"] input[type="password"]:focus {
-    background:#dbeafe !important;
-    border:2px solid #3b82f6 !important;
-    box-shadow:0 0 0 3px rgba(59,130,246,0.15) !important;
+    border:2px solid #4f46e5 !important;
+    box-shadow:0 0 0 3px rgba(124,58,237,0.2) !important;
 }
-/* 사이드바 셀렉트박스 */
+/* 셀렉트박스 테두리 */
 [data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background:#eff6ff !important;
-    border:1.5px solid #93c5fd !important;
+    border:1.5px solid #7c3aed !important;
     border-radius:6px !important;
 }
-/* 사이드바 멀티셀렉트 */
-[data-testid="stSidebar"] [data-baseweb="select"] {
-    background:#eff6ff !important;
-}
-/* 입력칸 placeholder 색상 */
-[data-testid="stSidebar"] input::placeholder {
-    color:#93c5fd !important;
+/* 카드 바디 - 다크모드 대응 (white 강제 제거) */
+.sb-body {
+    border-radius:0 0 8px 8px;
+    padding:8px 10px;
+    margin-bottom:6px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -499,7 +493,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     # ── API 설정 ─────────────────────────
-    st.markdown("<div style='background:linear-gradient(90deg,#7c3aed,#9f67f5);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800'>🔑 API 설정 &nbsp;·&nbsp; 타인 노출 주의</span></div><div style='border:2px solid #7c3aed;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px;background:white'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:linear-gradient(90deg,#7c3aed,#9f67f5);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800'>API설정. Gemini Api · 타인노출주의</span></div><div style='border:2px solid #7c3aed;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px'>", unsafe_allow_html=True)
     if IS_CLOUD:
         api_key = st.text_input("", value="", type="password",
                                  placeholder="AIzaSy...", label_visibility="collapsed",
@@ -516,7 +510,7 @@ with st.sidebar:
     st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 프로젝트명 ───────────────────────
-    st.markdown("<div style='background:linear-gradient(90deg,#0369a1,#0ea5e9);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800'>📁 책 제목</span></div><div style='border:2px solid #0369a1;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px;background:white'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:linear-gradient(90deg,#0369a1,#0ea5e9);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800;cursor:help' title='소설/프로젝트 제목 입력 | 오디오 파일명에 사용됨'>📁 책 제목</span></div><div style='border:2px solid #0369a1;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px'>", unsafe_allow_html=True)
     proj_default = "" if IS_CLOUD else cfg.get("project_name","")
     project_name = st.text_input("", value=proj_default,
                                   placeholder="예: 봄의시작, 제1부",
@@ -526,7 +520,7 @@ with st.sidebar:
     selected_preset = "일반소설"
 
     # ── 성우 설정 ────────────────────────
-    st.markdown("<div style='background:linear-gradient(90deg,#065f46,#10b981);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800'>🎙️ 성우 설정</span></div><div style='border:2px solid #065f46;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px;background:white'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:linear-gradient(90deg,#065f46,#10b981);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800;cursor:help' title='남성(M)/여성(W) 목소리 선택 | 선택 후 특징 설명 표시'>🎙️ 성우 설정</span></div><div style='border:2px solid #065f46;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px'>", unsafe_allow_html=True)
     saved_voices = cfg.get("voices", {"M":"Charon","W":"Kore"})
     m_def = saved_voices.get("M","Charon")
     w_def = saved_voices.get("W","Kore")
@@ -567,7 +561,7 @@ with st.sidebar:
     st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 소설 설정 ────────────────────────
-    st.markdown("<div style='background:linear-gradient(90deg,#92400e,#f59e0b);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800'>📖 소설 설정</span></div><div style='border:2px solid #92400e;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px;background:white'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:linear-gradient(90deg,#92400e,#f59e0b);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800;cursor:help' title='시대배경+문체 설정 | 품질검사 정확도 향상 | 예: 1978년 서울, 조선시대'>📖 소설 설정</span></div><div style='border:2px solid #92400e;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px'>", unsafe_allow_html=True)
     novel_era = st.text_input("시대 배경", value=cfg.get("novel_era","현대"),
                                placeholder="예: 1978년 서울, 조선시대",
                                key="novel_era",
@@ -583,7 +577,7 @@ with st.sidebar:
     st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 모델 설정 (3개 통합) ─────────────
-    st.markdown("<div style='background:linear-gradient(90deg,#1e1b4b,#4338ca);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800'>⚙️ 모델 설정</span></div><div style='border:2px solid #1e1b4b;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px;background:white'>", unsafe_allow_html=True)
+    st.markdown("<div style='background:linear-gradient(90deg,#1e1b4b,#4338ca);border-radius:8px 8px 0 0;padding:8px 12px;margin-top:6px'><span style='color:white;font-size:13px;font-weight:800;cursor:help' title='품질검사/태그변환/TTS 모델 선택 | Pro=고품질 | Flash=빠름·저비용'>⚙️ 모델 설정</span></div><div style='border:2px solid #1e1b4b;border-top:none;border-radius:0 0 8px 8px;padding:8px 10px;margin-bottom:6px'>", unsafe_allow_html=True)
     check_model = st.selectbox("🔍 품질검사",
         ["gemini-2.5-pro","gemini-2.5-flash"],
         index=0, key="check_model",
