@@ -849,40 +849,65 @@ if 'analysis_result' in st.session_state and 'manuscript_checked' not in st.sess
         st.success("✅ 문제없음! 아래 단계로 진행하세요.")
         st.session_state['manuscript_checked'] = st.session_state['analysis_text']
     else:
-        types = [i.get('type','') for i in issues]
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("전체", len(issues))
-        c2.metric("어색함 🟡", types.count("어색함"))
-        c3.metric("AI패턴 🔴", types.count("AI패턴"))
-        c4.metric("맞춤법 🟠", types.count("맞춤법"))
+        types     = [i.get('type','') for i in issues]
+        cnt_all   = len(issues)
+        cnt_spell = types.count("맞춤법")
+        cnt_ai    = types.count("AI패턴")
+        cnt_awk   = types.count("어색함")
+        cnt_rep   = types.count("반복단어")
 
         accepted  = st.session_state.get('accepted_fixes', {})
-        color_map = {"어색함":"🟡","AI패턴":"🔴","맞춤법":"🟠"}
+        color_map = {"어색함":"🟡","AI패턴":"🟠","맞춤법":"🔴","반복단어":"🔵"}
 
-        # ── 필터 버튼 ──────────────────────────
+        # ── 통계 카드 (이미지 스타일) ──────────
+        st.markdown(f"""
+        <div style='display:flex;gap:16px;margin:8px 0 12px 0;flex-wrap:wrap'>
+          <div style='text-align:center'>
+            <div style='font-size:12px;color:#888'>전체</div>
+            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_all}</div>
+          </div>
+          <div style='text-align:center'>
+            <div style='font-size:12px;color:#888'>맞춤법 🔴</div>
+            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_spell}</div>
+          </div>
+          <div style='text-align:center'>
+            <div style='font-size:12px;color:#888'>AI패턴 🟠</div>
+            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_ai}</div>
+          </div>
+          <div style='text-align:center'>
+            <div style='font-size:12px;color:#888'>어색함 🟡</div>
+            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_awk}</div>
+          </div>
+          <div style='text-align:center'>
+            <div style='font-size:12px;color:#888'>반복단어 🔵</div>
+            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_rep}</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ── 필터 버튼 (이미지 스타일) ──────────
         flt = st.session_state.get('issue_filter','전체')
-        cnt_all  = len(issues)
-        cnt_awk  = types.count("어색함")
-        cnt_ai   = types.count("AI패턴")
-        cnt_spell= types.count("맞춤법")
-
-        f0,f1,f2,f3 = st.columns(4)
-        if f0.button(f"전체 ({cnt_all})",
+        f0,f1,f2,f3,f4 = st.columns(5)
+        if f0.button(f"전체({cnt_all})",
                      type="primary" if flt=='전체' else "secondary",
                      use_container_width=True, key="flt_all"):
             st.session_state['issue_filter']='전체'; st.rerun()
-        if f1.button(f"어색함🟡 ({cnt_awk})",
-                     type="primary" if flt=='어색함' else "secondary",
-                     use_container_width=True, key="flt_awk"):
-            st.session_state['issue_filter']='어색함'; st.rerun()
-        if f2.button(f"AI패턴🔴 ({cnt_ai})",
-                     type="primary" if flt=='AI패턴' else "secondary",
-                     use_container_width=True, key="flt_ai"):
-            st.session_state['issue_filter']='AI패턴'; st.rerun()
-        if f3.button(f"맞춤법🟠 ({cnt_spell})",
+        if f1.button(f"맞춤법({cnt_spell})",
                      type="primary" if flt=='맞춤법' else "secondary",
                      use_container_width=True, key="flt_spell"):
             st.session_state['issue_filter']='맞춤법'; st.rerun()
+        if f2.button(f"AI패턴({cnt_ai})",
+                     type="primary" if flt=='AI패턴' else "secondary",
+                     use_container_width=True, key="flt_ai"):
+            st.session_state['issue_filter']='AI패턴'; st.rerun()
+        if f3.button(f"어색함({cnt_awk})",
+                     type="primary" if flt=='어색함' else "secondary",
+                     use_container_width=True, key="flt_awk"):
+            st.session_state['issue_filter']='어색함'; st.rerun()
+        if f4.button(f"반복({cnt_rep})",
+                     type="primary" if flt=='반복단어' else "secondary",
+                     use_container_width=True, key="flt_rep"):
+            st.session_state['issue_filter']='반복단어'; st.rerun()
 
         # 현재 필터 유형 전체 제안 적용 버튼
         if flt != '전체':
