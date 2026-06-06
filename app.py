@@ -23,8 +23,8 @@ MAX_CHUNK_CHARS = 4000
 CONFIG_FILE     = "config.json"
 
 # 남성/여성 목소리 분리
-MALE_VOICES = ["Charon", "Fenrir", "Orus", "Puck"]
-FEMALE_VOICES = ["Kore", "Aoede", "Zephyr", "Leda"]
+MALE_VOICES = ["Charon", "Fenrir"]
+FEMALE_VOICES = ["Kore", "Aoede"]
 ALL_VOICES = MALE_VOICES + FEMALE_VOICES
 
 MALE_VOICE_HELP   = "Charon=차분·깊음 | Fenrir=강함 | Orus=중성 | Puck=가벼움"
@@ -270,11 +270,10 @@ def group_into_segments(lines):
 
 
 def get_voice_for_speaker(spk, speakers):
-    """화자에 맞는 목소리 반환"""
-    if spk in speakers:
-        return speakers[spk]
-    elif spk == "NA" and "M" in speakers:
-        return speakers["M"]
+    """화자에 맞는 목소리 반환 - M/W 두 개만 사용"""
+    if spk == "W" and "W" in speakers:
+        return speakers["W"]
+    # M, NA, NARRATOR, 기타 모두 → M 목소리
     return speakers.get("M", "Charon")
 
 
@@ -553,13 +552,13 @@ with st.sidebar:
         m_voice = st.selectbox("", MALE_VOICES,
                                 index=MALE_VOICES.index(m_def) if m_def in MALE_VOICES else 0,
                                 label_visibility="collapsed", key="voice_M",
-                                help="Charon: 차분·깊음 (내레이터 추천)\nFenrir: 강하고 힘있음\nOrus: 중성적·안정적\nPuck: 가볍고 젊음")
+                                help="Charon: 차분·깊음 (내레이터 추천)\nFenrir: 강하고 힘있음")
     with col_w:
         st.caption("🔴 여성(W)")
         w_voice = st.selectbox("", FEMALE_VOICES,
                                 index=FEMALE_VOICES.index(w_def) if w_def in FEMALE_VOICES else 0,
                                 label_visibility="collapsed", key="voice_W",
-                                help="Kore: 감성적·따뜻함 (추천)\nAoede: 서사적·명확\nZephyr: 부드럽고 자연스러움\nLeda: 따뜻하고 친근")
+                                help="Kore: 감성적·따뜻함 (추천)\nAoede: 서사적·명확")
 
     # 성우 특징 설명 (선택된 성우 기준)
     voice_desc = {
@@ -705,8 +704,39 @@ chapter_name = st.text_input("챕터명 (파일명용)", value="",
 st.markdown(step_header("1", "원고 입력 & 품질 검사",
             "품질 검사 후 자동으로 2단계로 이동"), unsafe_allow_html=True)
 
+# 파일 업로드
+uploaded_file = st.file_uploader(
+    "📂 파일 가져오기 (TXT, DOCX, PDF, HWP)",
+    type=["txt","docx","pdf"],
+    key="file_uploader",
+    help="TXT, DOCX, PDF 파일을 직접 불러올 수 있습니다"
+)
+if uploaded_file:
+    try:
+        if uploaded_file.name.endswith('.txt'):
+            file_text = uploaded_file.read().decode('utf-8', errors='ignore')
+        elif uploaded_file.name.endswith('.docx'):
+            from docx import Document as DocxDoc
+            import io
+            doc = DocxDoc(io.BytesIO(uploaded_file.read()))
+            file_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        elif uploaded_file.name.endswith('.pdf'):
+            import io
+            try:
+                import pymupdf
+                pdf = pymupdf.open(stream=uploaded_file.read(), filetype="pdf")
+                file_text = "\n".join([page.get_text() for page in pdf])
+            except:
+                from pypdf import PdfReader
+                reader = PdfReader(io.BytesIO(uploaded_file.read()))
+                file_text = "\n".join([p.extract_text() or "" for p in reader.pages])
+        st.session_state['manuscript'] = file_text
+        st.success(f"✅ {uploaded_file.name} 불러오기 완료 ({len(file_text):,}자)")
+    except Exception as e:
+        st.error(f"❌ 파일 읽기 오류: {e}. pip install python-docx pypdf 를 실행해 주세요.")
+
 manuscript = st.text_area("", height=250,
-    placeholder="여기에 원고를 붙여넣으세요...",
+    placeholder="여기에 원고를 붙여넣거나 위에서 파일을 불러오세요...",
     label_visibility="collapsed", key="manuscript")
 
 char_count = len(manuscript) if manuscript else 0
