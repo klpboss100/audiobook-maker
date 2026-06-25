@@ -738,10 +738,10 @@ if uploaded_file:
 # ── Google Docs 가져오기 (OAuth 계정 연동) ──
 GOOGLE_TOKEN_FILE = "google_token.pickle"
 GOOGLE_CLIENT_SECRET_FILE = "credentials.json"
-GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly",
-                  "https://www.googleapis.com/auth/documents.readonly"]
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
+WEB_REDIRECT_URI = "https://audiobook-makers.streamlit.app/"
 
-def get_google_creds():
+def get_google_creds_local():
     creds = None
     if os.path.exists(GOOGLE_TOKEN_FILE):
         with open(GOOGLE_TOKEN_FILE, "rb") as f:
@@ -757,6 +757,37 @@ def get_google_creds():
         with open(GOOGLE_TOKEN_FILE, "wb") as f:
             pickle.dump(creds, f)
     return creds
+
+def get_web_flow():
+    from google_auth_oauthlib.flow import Flow
+    client_config = {
+        "web": {
+            "client_id": st.secrets["google_client_id"],
+            "client_secret": st.secrets["google_client_secret"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [WEB_REDIRECT_URI],
+        }
+    }
+    return Flow.from_client_config(client_config, scopes=GOOGLE_SCOPES, redirect_uri=WEB_REDIRECT_URI)
+
+def get_google_creds_cloud():
+    creds = st.session_state.get('google_creds')
+    if creds and creds.valid:
+        return creds
+    if creds and creds.expired and creds.refresh_token:
+        from google.auth.transport.requests import Request
+        creds.refresh(Request())
+        st.session_state['google_creds'] = creds
+        return creds
+    if "code" in st.query_params:
+        flow = get_web_flow()
+        flow.fetch_token(code=st.query_params["code"])
+        creds = flow.credentials
+        st.session_state['google_creds'] = creds
+        st.query_params.clear()
+        return creds
+    return None
 
 def extract_doc_id(url_or_id):
     m = re.search(r"/d/([a-zA-Z0-9_-]+)", url_or_id)
@@ -779,24 +810,49 @@ def read_google_doc_text(creds, doc_id):
     return "\n".join(lines)
 
 with st.expander("📄 Google Docs에서 가져오기"):
-    if not os.path.exists(GOOGLE_CLIENT_SECRET_FILE):
-        st.warning(f"`{GOOGLE_CLIENT_SECRET_FILE}` 파일이 없습니다. Google Cloud Console에서 OAuth 클라이언트(데스크톱 앱)를 만들고 "
-                   f"다운로드한 JSON을 `{GOOGLE_CLIENT_SECRET_FILE}` 이름으로 이 폴더에 저장하세요.")
-    else:
-        doc_url = st.text_input("구글 문서 링크를 붙여넣으세요",
-            placeholder="https://docs.google.com/document/d/xxxxxxxx/edit", key="google_doc_url")
-        if st.button("📥 이 문서 가져오기"):
-            if not doc_url.strip():
-                st.warning("링크를 먼저 입력해주세요.")
+    if IS_CLOUD:
+        if "google_client_id" not in st.secrets or "google_client_secret" not in st.secrets:
+            st.warning("Streamlit Cloud의 Secrets에 `google_client_id`, `google_client_secret`을 등록해주세요.")
+        else:
+            creds = get_google_creds_cloud()
+            if not creds:
+                flow = get_web_flow()
+                auth_url, _ = flow.authorization_url(access_type='offline', include_granted_scopes='true', prompt='consent')
+                st.link_button("🔑 구글 계정으로 로그인", auth_url)
             else:
-                try:
-                    creds = get_google_creds()
-                    doc_id = extract_doc_id(doc_url)
-                    file_text = read_google_doc_text(creds, doc_id)
-                    st.session_state['manuscript'] = file_text
-                    st.success(f"✅ 불러오기 완료 ({len(file_text):,}자)")
-                except Exception as e:
-                    st.error(f"❌ 문서 읽기 오류: {e}")
+                st.success("✅ 구글 계정 연동됨")
+                doc_url = st.text_input("구글 문서 링크를 붙여넣으세요",
+                    placeholder="https://docs.google.com/document/d/xxxxxxxx/edit", key="google_doc_url_cloud")
+                if st.button("📥 이 문서 가져오기", key="google_doc_fetch_cloud"):
+                    if not doc_url.strip():
+                        st.warning("링크를 먼저 입력해주세요.")
+                    else:
+                        try:
+                            doc_id = extract_doc_id(doc_url)
+                            file_text = read_google_doc_text(creds, doc_id)
+                            st.session_state['manuscript'] = file_text
+                            st.success(f"✅ 불러오기 완료 ({len(file_text):,}자)")
+                        except Exception as e:
+                            st.error(f"❌ 문서 읽기 오류: {e}")
+    else:
+        if not os.path.exists(GOOGLE_CLIENT_SECRET_FILE):
+            st.warning(f"`{GOOGLE_CLIENT_SECRET_FILE}` 파일이 없습니다. Google Cloud Console에서 OAuth 클라이언트(데스크톱 앱)를 만들고 "
+                       f"다운로드한 JSON을 `{GOOGLE_CLIENT_SECRET_FILE}` 이름으로 이 폴더에 저장하세요.")
+        else:
+            doc_url = st.text_input("구글 문서 링크를 붙여넣으세요",
+                placeholder="https://docs.google.com/document/d/xxxxxxxx/edit", key="google_doc_url")
+            if st.button("📥 이 문서 가져오기"):
+                if not doc_url.strip():
+                    st.warning("링크를 먼저 입력해주세요.")
+                else:
+                    try:
+                        creds = get_google_creds_local()
+                        doc_id = extract_doc_id(doc_url)
+                        file_text = read_google_doc_text(creds, doc_id)
+                        st.session_state['manuscript'] = file_text
+                        st.success(f"✅ 불러오기 완료 ({len(file_text):,}자)")
+                    except Exception as e:
+                        st.error(f"❌ 문서 읽기 오류: {e}")
 
 manuscript = st.text_area("", height=250,
     placeholder="여기에 원고를 붙여넣거나 위에서 파일을 불러오세요...",
