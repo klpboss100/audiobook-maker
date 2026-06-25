@@ -1261,7 +1261,7 @@ if 'tagged_script' in st.session_state:
         client     = genai.Client(api_key=api_key)
         progress   = st.progress(0)
         status     = st.empty()
-        pcm_list   = list(load_progress().get('pcm_list',[])) if resume_from > 0 else []
+        pcm_list   = list((saved_prog or {}).get('pcm_list',[])) if resume_from > 0 else []
         error_flag = False
         done       = resume_from
         chunk_idx  = 0
