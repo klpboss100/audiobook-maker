@@ -325,7 +325,8 @@ def build_single_speaker_script(lines, voice_hint=""):
     return "\n".join(parts)
 
 
-def call_tts_single(client, script, voice_name, tts_model, retry=3):
+def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None):
+    rate_limit_retries = 0
     for attempt in range(retry):
         try:
             response = client.models.generate_content(
@@ -350,6 +351,15 @@ def call_tts_single(client, script, voice_name, tts_model, retry=3):
             else:
                 return generate_silence(0.5)
         except Exception as e:
+            msg = str(e)
+            is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
+            if is_rate_limit and rate_limit_retries < 10:
+                rate_limit_retries += 1
+                wait_s = 60
+                if status is not None:
+                    status.markdown(f"⏳ API 분당 요청 제한에 걸림. {wait_s}초 대기 후 재시도 ({rate_limit_retries}/10)...")
+                time.sleep(wait_s)
+                continue
             if attempt < retry - 1:
                 time.sleep(3)
             else:
@@ -1282,7 +1292,7 @@ if 'tagged_script' in st.session_state:
                 try:
                     voice_hint = "남성" if seg['speaker'] == "M" else "여성"
                     script = build_single_speaker_script(chunk, voice_hint)
-                    pcm    = call_tts_single(client, script, voice, tts_model)
+                    pcm    = call_tts_single(client, script, voice, tts_model, status=status)
                     pcm_list.append(pcm)
                     done += 1
                     chunk_idx += 1
