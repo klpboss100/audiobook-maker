@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+config.json
+credentials.json
+google_token.pickle
+streamlit_log.txt
+*.bat
+*.vbs

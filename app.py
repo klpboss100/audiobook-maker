@@ -735,6 +735,69 @@ if uploaded_file:
     except Exception as e:
         st.error(f"❌ 파일 읽기 오류: {e}. pip install python-docx pypdf 를 실행해 주세요.")
 
+# ── Google Docs 가져오기 (OAuth 계정 연동) ──
+GOOGLE_TOKEN_FILE = "google_token.pickle"
+GOOGLE_CLIENT_SECRET_FILE = "credentials.json"
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly",
+                  "https://www.googleapis.com/auth/documents.readonly"]
+
+def get_google_creds():
+    creds = None
+    if os.path.exists(GOOGLE_TOKEN_FILE):
+        with open(GOOGLE_TOKEN_FILE, "rb") as f:
+            creds = pickle.load(f)
+    if not creds or not creds.valid:
+        from google.auth.transport.requests import Request
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            flow = InstalledAppFlow.from_client_secrets_file(GOOGLE_CLIENT_SECRET_FILE, GOOGLE_SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open(GOOGLE_TOKEN_FILE, "wb") as f:
+            pickle.dump(creds, f)
+    return creds
+
+def extract_doc_id(url_or_id):
+    m = re.search(r"/d/([a-zA-Z0-9_-]+)", url_or_id)
+    if m:
+        return m.group(1)
+    return url_or_id.strip()
+
+def read_google_doc_text(creds, doc_id):
+    from googleapiclient.discovery import build
+    docs = build("docs", "v1", credentials=creds)
+    doc = docs.documents().get(documentId=doc_id).execute()
+    lines = []
+    for elem in doc.get("body", {}).get("content", []):
+        para = elem.get("paragraph")
+        if not para:
+            continue
+        text = "".join(r.get("textRun", {}).get("content", "") for r in para.get("elements", []))
+        if text.strip():
+            lines.append(text.rstrip("\n"))
+    return "\n".join(lines)
+
+with st.expander("📄 Google Docs에서 가져오기"):
+    if not os.path.exists(GOOGLE_CLIENT_SECRET_FILE):
+        st.warning(f"`{GOOGLE_CLIENT_SECRET_FILE}` 파일이 없습니다. Google Cloud Console에서 OAuth 클라이언트(데스크톱 앱)를 만들고 "
+                   f"다운로드한 JSON을 `{GOOGLE_CLIENT_SECRET_FILE}` 이름으로 이 폴더에 저장하세요.")
+    else:
+        doc_url = st.text_input("구글 문서 링크를 붙여넣으세요",
+            placeholder="https://docs.google.com/document/d/xxxxxxxx/edit", key="google_doc_url")
+        if st.button("📥 이 문서 가져오기"):
+            if not doc_url.strip():
+                st.warning("링크를 먼저 입력해주세요.")
+            else:
+                try:
+                    creds = get_google_creds()
+                    doc_id = extract_doc_id(doc_url)
+                    file_text = read_google_doc_text(creds, doc_id)
+                    st.session_state['manuscript'] = file_text
+                    st.success(f"✅ 불러오기 완료 ({len(file_text):,}자)")
+                except Exception as e:
+                    st.error(f"❌ 문서 읽기 오류: {e}")
+
 manuscript = st.text_area("", height=250,
     placeholder="여기에 원고를 붙여넣거나 위에서 파일을 불러오세요...",
     label_visibility="collapsed", key="manuscript")
@@ -849,65 +912,40 @@ if 'analysis_result' in st.session_state and 'manuscript_checked' not in st.sess
         st.success("✅ 문제없음! 아래 단계로 진행하세요.")
         st.session_state['manuscript_checked'] = st.session_state['analysis_text']
     else:
-        types     = [i.get('type','') for i in issues]
-        cnt_all   = len(issues)
-        cnt_spell = types.count("맞춤법")
-        cnt_ai    = types.count("AI패턴")
-        cnt_awk   = types.count("어색함")
-        cnt_rep   = types.count("반복단어")
+        types = [i.get('type','') for i in issues]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("전체", len(issues))
+        c2.metric("어색함 🟡", types.count("어색함"))
+        c3.metric("AI패턴 🔴", types.count("AI패턴"))
+        c4.metric("맞춤법 🟠", types.count("맞춤법"))
 
         accepted  = st.session_state.get('accepted_fixes', {})
-        color_map = {"어색함":"🟡","AI패턴":"🟠","맞춤법":"🔴","반복단어":"🔵"}
+        color_map = {"어색함":"🟡","AI패턴":"🔴","맞춤법":"🟠"}
 
-        # ── 통계 카드 (이미지 스타일) ──────────
-        st.markdown(f"""
-        <div style='display:flex;gap:16px;margin:8px 0 12px 0;flex-wrap:wrap'>
-          <div style='text-align:center'>
-            <div style='font-size:12px;color:#888'>전체</div>
-            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_all}</div>
-          </div>
-          <div style='text-align:center'>
-            <div style='font-size:12px;color:#888'>맞춤법 🔴</div>
-            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_spell}</div>
-          </div>
-          <div style='text-align:center'>
-            <div style='font-size:12px;color:#888'>AI패턴 🟠</div>
-            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_ai}</div>
-          </div>
-          <div style='text-align:center'>
-            <div style='font-size:12px;color:#888'>어색함 🟡</div>
-            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_awk}</div>
-          </div>
-          <div style='text-align:center'>
-            <div style='font-size:12px;color:#888'>반복단어 🔵</div>
-            <div style='font-size:28px;font-weight:700;color:#1a1a2e'>{cnt_rep}</div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ── 필터 버튼 (이미지 스타일) ──────────
+        # ── 필터 버튼 ──────────────────────────
         flt = st.session_state.get('issue_filter','전체')
-        f0,f1,f2,f3,f4 = st.columns(5)
-        if f0.button(f"전체({cnt_all})",
+        cnt_all  = len(issues)
+        cnt_awk  = types.count("어색함")
+        cnt_ai   = types.count("AI패턴")
+        cnt_spell= types.count("맞춤법")
+
+        f0,f1,f2,f3 = st.columns(4)
+        if f0.button(f"전체 ({cnt_all})",
                      type="primary" if flt=='전체' else "secondary",
                      use_container_width=True, key="flt_all"):
             st.session_state['issue_filter']='전체'; st.rerun()
-        if f1.button(f"맞춤법({cnt_spell})",
-                     type="primary" if flt=='맞춤법' else "secondary",
-                     use_container_width=True, key="flt_spell"):
-            st.session_state['issue_filter']='맞춤법'; st.rerun()
-        if f2.button(f"AI패턴({cnt_ai})",
-                     type="primary" if flt=='AI패턴' else "secondary",
-                     use_container_width=True, key="flt_ai"):
-            st.session_state['issue_filter']='AI패턴'; st.rerun()
-        if f3.button(f"어색함({cnt_awk})",
+        if f1.button(f"어색함🟡 ({cnt_awk})",
                      type="primary" if flt=='어색함' else "secondary",
                      use_container_width=True, key="flt_awk"):
             st.session_state['issue_filter']='어색함'; st.rerun()
-        if f4.button(f"반복({cnt_rep})",
-                     type="primary" if flt=='반복단어' else "secondary",
-                     use_container_width=True, key="flt_rep"):
-            st.session_state['issue_filter']='반복단어'; st.rerun()
+        if f2.button(f"AI패턴🔴 ({cnt_ai})",
+                     type="primary" if flt=='AI패턴' else "secondary",
+                     use_container_width=True, key="flt_ai"):
+            st.session_state['issue_filter']='AI패턴'; st.rerun()
+        if f3.button(f"맞춤법🟠 ({cnt_spell})",
+                     type="primary" if flt=='맞춤법' else "secondary",
+                     use_container_width=True, key="flt_spell"):
+            st.session_state['issue_filter']='맞춤법'; st.rerun()
 
         # 현재 필터 유형 전체 제안 적용 버튼
         if flt != '전체':
