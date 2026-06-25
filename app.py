@@ -353,11 +353,14 @@ def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None)
         except Exception as e:
             msg = str(e)
             is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
-            if is_rate_limit and rate_limit_retries < 10:
+            is_server_err = ("500" in msg or "503" in msg or "INTERNAL" in msg
+                              or "UNAVAILABLE" in msg or "DEADLINE_EXCEEDED" in msg)
+            if (is_rate_limit or is_server_err) and rate_limit_retries < 10:
                 rate_limit_retries += 1
-                wait_s = 60
+                wait_s = 60 if is_rate_limit else 15
+                reason = "API 분당 요청 제한에 걸림" if is_rate_limit else "구글 서버 일시 오류"
                 if status is not None:
-                    status.markdown(f"⏳ API 분당 요청 제한에 걸림. {wait_s}초 대기 후 재시도 ({rate_limit_retries}/10)...")
+                    status.markdown(f"⏳ {reason}. {wait_s}초 대기 후 재시도 ({rate_limit_retries}/10)...")
                 time.sleep(wait_s)
                 continue
             if attempt < retry - 1:
