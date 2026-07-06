@@ -19,7 +19,7 @@ from google.genai import types
 # 상수
 # ═══════════════════════════════════════════
 SAMPLE_RATE     = 24000
-MAX_CHUNK_CHARS = 4000
+MAX_CHUNK_CHARS = 900   # TTS 1회 호출당 최대 글자수 (길수록 뒷부분에 잡음/에코 발생 위험 ↑)
 CONFIG_FILE     = "config.json"
 
 # 남성/여성 목소리 분리
@@ -297,11 +297,11 @@ def merge_segments_by_voice(segs, speakers):
     return merged
 
 
-def chunk_segment(segment_lines):
+def chunk_segment(segment_lines, max_chars=MAX_CHUNK_CHARS):
     chunks, current, current_len = [], [], 0
     for line in segment_lines:
         size = len(line['text']) + len(line['emotion']) + 25
-        if current_len + size > MAX_CHUNK_CHARS and current:
+        if current_len + size > max_chars and current:
             chunks.append(current)
             current, current_len = [line], size
         else:
@@ -671,6 +671,12 @@ with st.sidebar:
     title_pause = st.slider("⏸️ 제목 후 무음", 0.5, 3.0, 1.5, 0.5,
                              format="%.1f초", key="title_pause",
                              help="챕터 제목 후 무음\n추천: 1.5초")
+    max_chunk_chars = st.slider("🔊 TTS 청크 최대 글자수", 300, 4000, MAX_CHUNK_CHARS, 100,
+                             key="max_chunk_chars",
+                             help="TTS 1회 호출당 최대 글자수.\n"
+                                  "길수록 뒷부분에 잡음·에코가 생길 위험이 커집니다 "
+                                  "(구글 TTS 모델의 알려진 한계 — 1~2분 넘는 오디오부터 열화 시작).\n"
+                                  "잡음이 나면 이 값을 낮춰서 다시 생성해보세요.\n추천: 900자 이하")
     st.markdown("</div></div>", unsafe_allow_html=True)
 
     # ── 사용 가이드 (접이식) ─────────────
@@ -1292,11 +1298,11 @@ if 'tagged_script' in st.session_state:
 
     segs_raw = group_into_segments(lines)
     segs = merge_segments_by_voice(segs_raw, speakers)
-    total_chunks = sum(len(chunk_segment(s['lines'])) for s in segs)
-    saved_calls  = sum(len(chunk_segment(s['lines'])) for s in segs_raw) - total_chunks
+    total_chunks = sum(len(chunk_segment(s['lines'], max_chunk_chars)) for s in segs)
+    saved_calls  = sum(len(chunk_segment(s['lines'], max_chunk_chars)) for s in segs_raw) - total_chunks
     st.caption(
         f"세그먼트 {len(segs_raw)}개 → 병합 {len(segs)}개  |  "
-        f"청크 {total_chunks}개  |  API 절감 {saved_calls}회  |  {tts_model}"
+        f"청크 {total_chunks}개 (최대 {max_chunk_chars}자)  |  API 절감 {saved_calls}회  |  {tts_model}"
     )
 
     saved_prog  = load_progress()
@@ -1329,7 +1335,7 @@ if 'tagged_script' in st.session_state:
 
         for seg in segs:
             voice = get_voice_for_speaker(seg['speaker'], speakers)
-            chunks = chunk_segment(seg['lines'])
+            chunks = chunk_segment(seg['lines'], max_chunk_chars)
             for chunk in chunks:
                 if chunk_idx < resume_from:
                     chunk_idx += 1
