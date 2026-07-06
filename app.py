@@ -407,6 +407,17 @@ def merge_to_wav(pcm_list):
     return buf.getvalue()
 
 
+def format_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}시간 {m}분 {s}초"
+    if m:
+        return f"{m}분 {s}초"
+    return f"{s}초"
+
+
 def count_total_chunks(lines):
     total = 0
     for seg in group_into_segments(lines):
@@ -425,11 +436,15 @@ st.set_page_config(page_title="오디오북 메이커", page_icon="🎧", layout
 if st.session_state.pop('_pending_reset', False):
     for _k in ['manuscript_checked','tagged_script','audio_data',
                 'analysis_result','analysis_text','accepted_fixes',
-                'direct_input_mode','issue_filter']:
+                'direct_input_mode','issue_filter','audio_gen_seconds']:
         st.session_state.pop(_k, None)
     st.session_state['manuscript']            = ""
     st.session_state['chapter_name']       = ""
     st.session_state['project_name_input'] = ""
+
+# ── 업로드 파일명 → 챕터명 자동 입력 (위젯 생성 전에 처리) ──
+if '_pending_chapter_name' in st.session_state:
+    st.session_state['chapter_name'] = st.session_state.pop('_pending_chapter_name')
 
 st.markdown("""
 <style>
@@ -533,7 +548,35 @@ with st.sidebar:
         api_key = st.text_input("", value="", type="password",
                                  placeholder="AIzaSy...", label_visibility="collapsed",
                                  key="api_key_input",
-                                 help="Google AI Studio 무료 발급\nhttps://aistudio.google.com/apikey\n입력 키는 타인에게 노출되지 않습니다")
+                                 help="Google AI Studio 무료 발급\nhttps://aistudio.google.com/apikey\n입력 키는 이 브라우저에만 저장됩니다 (서버에는 저장 안 됨)")
+        # 서버에는 저장하지 않고, 이 브라우저의 localStorage에만 저장/복원
+        streamlit.components.v1.html("""
+        <script>
+        (function() {
+            const STORAGE_KEY = "audiobook_gemini_api_key";
+            const doc = window.parent.document;
+            const input = doc.querySelector('input[type="password"]');
+            if (!input) return;
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved && !input.value) {
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                setter.call(input, saved);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                setTimeout(function() { input.blur(); }, 50);
+            }
+            if (!input._lsBound) {
+                input._lsBound = true;
+                input.addEventListener('change', function() {
+                    if (input.value) {
+                        localStorage.setItem(STORAGE_KEY, input.value);
+                    } else {
+                        localStorage.removeItem(STORAGE_KEY);
+                    }
+                });
+            }
+        })();
+        </script>
+        """, height=0)
     else:
         api_key = st.text_input("", value=cfg.get("api_key",""), type="password",
                                  placeholder="AIzaSy...", label_visibility="collapsed",
@@ -744,6 +787,10 @@ if uploaded_file:
                 reader = PdfReader(io.BytesIO(uploaded_file.read()))
                 file_text = "\n".join([p.extract_text() or "" for p in reader.pages])
         st.session_state['manuscript'] = file_text
+        if st.session_state.get('_last_uploaded_name') != uploaded_file.name:
+            st.session_state['_last_uploaded_name'] = uploaded_file.name
+            st.session_state['_pending_chapter_name'] = os.path.splitext(uploaded_file.name)[0]
+            st.rerun()
         st.success(f"✅ {uploaded_file.name} 불러오기 완료 ({len(file_text):,}자)")
     except Exception as e:
         st.error(f"❌ 파일 읽기 오류: {e}. pip install python-docx pypdf 를 실행해 주세요.")
@@ -1271,6 +1318,7 @@ if 'tagged_script' in st.session_state:
         resume_from = 0 if start_btn else None
 
     if resume_from is not None:
+        gen_start  = time.time()
         client     = genai.Client(api_key=api_key)
         progress   = st.progress(0)
         status     = st.empty()
@@ -1314,15 +1362,20 @@ if 'tagged_script' in st.session_state:
             status.markdown("🔗 합치는 중...")
             wav = merge_to_wav(pcm_list)
             st.session_state['audio_data'] = wav
+            st.session_state['audio_gen_seconds'] = time.time() - gen_start
             clear_progress()
             progress.progress(1.0)
-            status.markdown("🎧 완료!")
+            status.markdown(f"🎧 완료! (소요시간 {format_duration(st.session_state['audio_gen_seconds'])})")
 
     if 'audio_data' in st.session_state:
         wav  = st.session_state['audio_data']
         mb   = len(wav) / 1024 / 1024
         fname = f"{project_name}_{chapter_name}.wav"
-        st.success(f"✅ 완료 — {mb:.1f} MB")
+        with wave.open(io.BytesIO(wav)) as _wf:
+            audio_len = _wf.getnframes() / _wf.getframerate()
+        gen_seconds = st.session_state.get('audio_gen_seconds')
+        gen_txt = f"  |  ⏱️ 제작 소요시간 {format_duration(gen_seconds)}" if gen_seconds is not None else ""
+        st.success(f"✅ 완료 — {mb:.1f} MB  |  🎵 오디오 길이 {format_duration(audio_len)}{gen_txt}")
         st.audio(wav, format="audio/wav")
         st.download_button(f"⬇️ {fname} 저장",
             data=wav, file_name=fname,
