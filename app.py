@@ -8,7 +8,7 @@
 
 import streamlit as st
 import streamlit.components.v1
-import re, io, wave, time, json, os, pickle
+import re, io, wave, time, json, os, pickle, random
 
 # 환경 자동 감지: Streamlit Cloud = /home/appuser
 IS_CLOUD = os.environ.get('HOME', '') == '/home/appuser' 
@@ -20,6 +20,7 @@ from google.genai import types
 # ═══════════════════════════════════════════
 SAMPLE_RATE     = 24000
 MAX_CHUNK_CHARS = 900   # TTS 1회 호출당 최대 글자수 (길수록 뒷부분에 잡음/에코 발생 위험 ↑)
+SEED_BASE       = 7     # 생성 시 seed 고정 → 목소리 톤이 매 호출마다 랜덤하게 튀는 것을 완화 (구글 TTS의 알려진 불안정성)
 CONFIG_FILE     = "config.json"
 
 # 남성/여성 목소리 분리
@@ -325,23 +326,26 @@ def build_single_speaker_script(lines, voice_hint=""):
     return "\n".join(parts)
 
 
-def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None):
+def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None, seed=None):
     rate_limit_retries = 0
+    config_kwargs = dict(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                    voice_name=voice_name
+                )
+            )
+        )
+    )
+    if seed is not None:
+        config_kwargs["seed"] = seed
     for attempt in range(retry):
         try:
             response = client.models.generate_content(
                 model=tts_model,
                 contents=script,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=voice_name
-                            )
-                        )
-                    )
-                )
+                config=types.GenerateContentConfig(**config_kwargs)
             )
             if (response.candidates and
                 response.candidates[0].content and
@@ -371,10 +375,11 @@ def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None)
 
 PROGRESS_FILE = "progress.pkl"
 
-def save_progress(pcm_list, done, chapter):
+def save_progress(pcm_list, done, chapter, chunk_meta=None):
     """진행상황을 파일로 저장"""
     with open(PROGRESS_FILE, 'wb') as f:
-        pickle.dump({'pcm_list': pcm_list, 'done': done, 'chapter': chapter}, f)
+        pickle.dump({'pcm_list': pcm_list, 'done': done, 'chapter': chapter,
+                     'chunk_meta': chunk_meta or []}, f)
 
 def load_progress():
     """저장된 진행상황 로드"""
@@ -436,7 +441,8 @@ st.set_page_config(page_title="오디오북 메이커", page_icon="🎧", layout
 if st.session_state.pop('_pending_reset', False):
     for _k in ['manuscript_checked','tagged_script','audio_data',
                 'analysis_result','analysis_text','accepted_fixes',
-                'direct_input_mode','issue_filter','audio_gen_seconds']:
+                'direct_input_mode','issue_filter','audio_gen_seconds',
+                'pcm_list','chunk_meta']:
         st.session_state.pop(_k, None)
     st.session_state['manuscript']            = ""
     st.session_state['chapter_name']       = ""
@@ -1329,6 +1335,7 @@ if 'tagged_script' in st.session_state:
         progress   = st.progress(0)
         status     = st.empty()
         pcm_list   = list((saved_prog or {}).get('pcm_list',[])) if resume_from > 0 else []
+        chunk_meta = list((saved_prog or {}).get('chunk_meta',[])) if resume_from > 0 else []
         error_flag = False
         done       = resume_from
         chunk_idx  = 0
@@ -1349,11 +1356,14 @@ if 'tagged_script' in st.session_state:
                 try:
                     voice_hint = "남성" if seg['speaker'] == "M" else "여성"
                     script = build_single_speaker_script(chunk, voice_hint)
-                    pcm    = call_tts_single(client, script, voice, tts_model, status=status)
+                    seed   = SEED_BASE + chunk_idx
+                    pcm    = call_tts_single(client, script, voice, tts_model, status=status, seed=seed)
                     pcm_list.append(pcm)
+                    chunk_meta.append({'kind':'audio', 'speaker':seg['speaker'],
+                                        'voice':voice, 'script':script, 'seed':seed})
                     done += 1
                     chunk_idx += 1
-                    save_progress(list(pcm_list), done, chapter_name)
+                    save_progress(list(pcm_list), done, chapter_name, list(chunk_meta))
                 except Exception as e:
                     st.error(f"❌ [{seg['speaker']}] {e}")
                     st.info(f"💾 {done}청크까지 저장됨. [▶️ 이어서 생성]으로 재시작하세요.")
@@ -1361,6 +1371,7 @@ if 'tagged_script' in st.session_state:
                     break
             if seg['is_title'] and not error_flag:
                 pcm_list.append(generate_silence(title_pause))
+                chunk_meta.append({'kind':'silence', 'seconds':title_pause})
             if error_flag:
                 break
 
@@ -1368,6 +1379,8 @@ if 'tagged_script' in st.session_state:
             status.markdown("🔗 합치는 중...")
             wav = merge_to_wav(pcm_list)
             st.session_state['audio_data'] = wav
+            st.session_state['pcm_list'] = pcm_list
+            st.session_state['chunk_meta'] = chunk_meta
             st.session_state['audio_gen_seconds'] = time.time() - gen_start
             clear_progress()
             progress.progress(1.0)
@@ -1386,3 +1399,35 @@ if 'tagged_script' in st.session_state:
         st.download_button(f"⬇️ {fname} 저장",
             data=wav, file_name=fname,
             mime="audio/wav", use_container_width=True)
+
+        # ── 청크별 재생성 (구글 TTS가 가끔 목소리 톤을 다르게 내는 문제 대응) ──
+        meta = st.session_state.get('chunk_meta') or []
+        audio_indices = [i for i, m in enumerate(meta) if m['kind'] == 'audio']
+        if audio_indices:
+            with st.expander("🔁 특정 부분 다시 생성 — 목소리가 이상하게(다른 사람처럼) 나온 부분만 재시도"):
+                st.caption(
+                    "구글 TTS는 같은 목소리를 요청해도 가끔 톤·억양이 다르게 나오는 "
+                    "알려진 불안정성이 있습니다. 전체를 다시 만들 필요 없이, "
+                    "이상하게 나온 부분만 골라서 다시 생성할 수 있습니다."
+                )
+                labels = [
+                    f"#{i+1}  [{meta[i]['speaker']}]  {meta[i]['script'][:30].replace(chr(10), ' ')}..."
+                    for i in audio_indices
+                ]
+                pick = st.selectbox("다시 생성할 청크", options=list(range(len(audio_indices))),
+                                     format_func=lambda k: labels[k], key="regen_chunk_pick")
+                pick_idx = audio_indices[pick]
+                m = meta[pick_idx]
+                st.text_area("이 청크의 스크립트", value=m['script'], height=100,
+                              disabled=True, key="regen_script_view")
+                st.audio(merge_to_wav([st.session_state['pcm_list'][pick_idx]]), format="audio/wav")
+                if st.button("🔁 이 부분만 다시 생성", key="regen_btn"):
+                    with st.spinner("다시 생성 중..."):
+                        regen_client = genai.Client(api_key=api_key)
+                        new_seed = random.randint(0, 2_000_000_000)
+                        new_pcm = call_tts_single(regen_client, m['script'], m['voice'], tts_model, seed=new_seed)
+                    st.session_state['pcm_list'][pick_idx] = new_pcm
+                    st.session_state['chunk_meta'][pick_idx]['seed'] = new_seed
+                    st.session_state['audio_data'] = merge_to_wav(st.session_state['pcm_list'])
+                    st.success("재생성 완료! 위쪽 오디오가 갱신되었습니다.")
+                    st.rerun()
