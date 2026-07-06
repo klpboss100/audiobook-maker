@@ -321,7 +321,7 @@ def build_single_speaker_script(lines, voice_hint=""):
         if line['emotion'] in ('narration', 'title'):
             parts.append(line['text'])
         else:
-            parts.append(f"({line['emotion']}) {line['text']}")
+            parts.append(line['text'])
     return "\n".join(parts)
 
 
