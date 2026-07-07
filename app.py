@@ -9,6 +9,7 @@
 import streamlit as st
 import streamlit.components.v1
 import re, io, wave, time, json, os, pickle, random
+import lameenc
 
 # 환경 자동 감지: Streamlit Cloud = /home/appuser
 IS_CLOUD = os.environ.get('HOME', '') == '/home/appuser' 
@@ -410,6 +411,21 @@ def merge_to_wav(pcm_list):
         for pcm in pcm_list:
             wf.writeframes(pcm)
     return buf.getvalue()
+
+
+def merge_to_mp3(pcm_list):
+    encoder = lameenc.Encoder()
+    encoder.set_bit_rate(128)
+    encoder.set_in_sample_rate(SAMPLE_RATE)
+    encoder.set_channels(1)
+    encoder.set_quality(2)
+    mp3_data = encoder.encode(b"".join(pcm_list))
+    return mp3_data + encoder.flush()
+
+
+def pcm_duration_seconds(pcm_list):
+    total_bytes = sum(len(p) for p in pcm_list)
+    return total_bytes / 2 / SAMPLE_RATE
 
 
 def format_duration(seconds: float) -> str:
@@ -1376,9 +1392,9 @@ if 'tagged_script' in st.session_state:
                 break
 
         if not error_flag and pcm_list:
-            status.markdown("🔗 합치는 중...")
-            wav = merge_to_wav(pcm_list)
-            st.session_state['audio_data'] = wav
+            status.markdown("🔗 MP3로 합치는 중...")
+            mp3 = merge_to_mp3(pcm_list)
+            st.session_state['audio_data'] = mp3
             st.session_state['pcm_list'] = pcm_list
             st.session_state['chunk_meta'] = chunk_meta
             st.session_state['audio_gen_seconds'] = time.time() - gen_start
@@ -1387,18 +1403,17 @@ if 'tagged_script' in st.session_state:
             status.markdown(f"🎧 완료! (소요시간 {format_duration(st.session_state['audio_gen_seconds'])})")
 
     if 'audio_data' in st.session_state:
-        wav  = st.session_state['audio_data']
-        mb   = len(wav) / 1024 / 1024
-        fname = f"{project_name}_{chapter_name}.wav"
-        with wave.open(io.BytesIO(wav)) as _wf:
-            audio_len = _wf.getnframes() / _wf.getframerate()
+        mp3  = st.session_state['audio_data']
+        mb   = len(mp3) / 1024 / 1024
+        fname = f"{project_name}_{chapter_name}.mp3"
+        audio_len = pcm_duration_seconds(st.session_state.get('pcm_list', []))
         gen_seconds = st.session_state.get('audio_gen_seconds')
         gen_txt = f"  |  ⏱️ 제작 소요시간 {format_duration(gen_seconds)}" if gen_seconds is not None else ""
         st.success(f"✅ 완료 — {mb:.1f} MB  |  🎵 오디오 길이 {format_duration(audio_len)}{gen_txt}")
-        st.audio(wav, format="audio/wav")
+        st.audio(mp3, format="audio/mp3")
         st.download_button(f"⬇️ {fname} 저장",
-            data=wav, file_name=fname,
-            mime="audio/wav", use_container_width=True)
+            data=mp3, file_name=fname,
+            mime="audio/mpeg", use_container_width=True)
 
         # ── 청크별 재생성 (구글 TTS가 가끔 목소리 톤을 다르게 내는 문제 대응) ──
         meta = st.session_state.get('chunk_meta') or []
@@ -1428,6 +1443,6 @@ if 'tagged_script' in st.session_state:
                         new_pcm = call_tts_single(regen_client, m['script'], m['voice'], tts_model, seed=new_seed)
                     st.session_state['pcm_list'][pick_idx] = new_pcm
                     st.session_state['chunk_meta'][pick_idx]['seed'] = new_seed
-                    st.session_state['audio_data'] = merge_to_wav(st.session_state['pcm_list'])
+                    st.session_state['audio_data'] = merge_to_mp3(st.session_state['pcm_list'])
                     st.success("재생성 완료! 위쪽 오디오가 갱신되었습니다.")
                     st.rerun()
