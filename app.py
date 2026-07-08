@@ -12,9 +12,15 @@ import re, io, wave, time, json, os, pickle, random
 import lameenc
 
 # 환경 자동 감지: Streamlit Cloud = /home/appuser
-IS_CLOUD = os.environ.get('HOME', '') == '/home/appuser' 
+IS_CLOUD = os.environ.get('HOME', '') == '/home/appuser'
 from google import genai
 from google.genai import types
+
+REQUEST_TIMEOUT_MS = 120_000  # 요청 하나가 응답 없이 무한정 매달리는 것 방지 (2분)
+
+def make_client(api_key: str) -> genai.Client:
+    return genai.Client(api_key=api_key,
+                         http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
 
 # ═══════════════════════════════════════════
 # 상수
@@ -132,7 +138,7 @@ def analyze_manuscript(api_key: str, manuscript: str, model: str,
                        era: str = "현대", style: str = "표준 현대어") -> dict:
     """원고 품질 분석"""
     import json as _json
-    client = genai.Client(api_key=api_key)
+    client = make_client(api_key)
     response = client.models.generate_content(
         model=model,
         contents=ANALYSIS_PROMPT.format(
@@ -200,7 +206,7 @@ def build_tag_prompt(speakers: dict, tags: str = "") -> str:
 # 핵심 함수
 # ═══════════════════════════════════════════
 def convert_tags(api_key, manuscript, model, speakers, tags=""):
-    client = genai.Client(api_key=api_key)
+    client = make_client(api_key)
     prompt = build_tag_prompt(speakers, tags)
     response = client.models.generate_content(
         model=model,
@@ -1364,7 +1370,7 @@ if 'tagged_script' in st.session_state:
 
     if resume_from is not None:
         gen_start  = time.time()
-        client     = genai.Client(api_key=api_key)
+        client     = make_client(api_key)
         progress   = st.progress(0)
         status     = st.empty()
         pcm_list   = list((saved_prog or {}).get('pcm_list',[])) if resume_from > 0 else []
@@ -1465,7 +1471,7 @@ if 'tagged_script' in st.session_state:
                 st.audio(merge_to_wav([st.session_state['pcm_list'][pick_idx]]), format="audio/wav")
                 if st.button("🔁 이 부분만 다시 생성", key="regen_btn"):
                     with st.spinner("다시 생성 중..."):
-                        regen_client = genai.Client(api_key=api_key)
+                        regen_client = make_client(api_key)
                         new_seed = random.randint(0, 2_000_000_000)
                         new_pcm = call_tts_single(regen_client, m['script'], m['voice'], tts_model, seed=new_seed)
                     st.session_state['pcm_list'][pick_idx] = new_pcm
