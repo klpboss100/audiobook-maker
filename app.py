@@ -224,10 +224,13 @@ def normalize_tags(text: str) -> str:
     return text
 
 def parse_tagged_script(text):
-    """순서 유지하며 태그줄 + 구분선 모두 파싱"""
+    """순서 유지하며 태그줄 + 구분선 모두 파싱.
+    [화자] [감정] 텍스트 형식과, 감정 태그가 없는 [화자] 텍스트 형식(haneng 등에서
+    복사해온 원고) 둘 다 인식함 — 감정 태그는 실제 음성에 영향 없으므로 안전."""
     text = normalize_tags(text)
     lines = []
-    tag_pattern = re.compile(r'^\[([A-Za-z가-힣]+)\]\s*\[([^\]]+)\]\s*(.+)$')
+    tag_pattern_full   = re.compile(r'^\[([A-Za-z가-힣]+)\]\s*\[([^\]]+)\]\s*(.+)$')
+    tag_pattern_simple = re.compile(r'^\[([A-Za-z가-힣]+)\]\s*(.+)$')
     sep_pattern  = re.compile(r'^[-_═=─]{3,}\s*$')
     for raw_line in text.split('\n'):
         stripped = raw_line.strip()
@@ -237,13 +240,22 @@ def parse_tagged_script(text):
         if sep_pattern.match(stripped):
             lines.append({'speaker': 'PAUSE', 'emotion': 'pause', 'text': ''})
             continue
-        # 태그 라인 감지
-        m = tag_pattern.match(stripped)
+        # 태그 라인 감지 — [화자] [감정] 텍스트 우선, 없으면 [화자] 텍스트
+        m = tag_pattern_full.match(stripped)
         if m:
             speaker, emotion, content = m.groups()
             lines.append({
                 'speaker': speaker.strip(),
                 'emotion': emotion.strip(),
+                'text':    content.strip()
+            })
+            continue
+        m = tag_pattern_simple.match(stripped)
+        if m:
+            speaker, content = m.groups()
+            lines.append({
+                'speaker': speaker.strip(),
+                'emotion': 'narration',
                 'text':    content.strip()
             })
     return lines
