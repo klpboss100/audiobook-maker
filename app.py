@@ -345,11 +345,15 @@ def build_single_speaker_script(lines, voice_hint=""):
     return "\n".join(parts)
 
 
-def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None, seed=None):
+def call_tts_single(client, script, voice_name, tts_model, retry=5, status=None, seed=None):
     """항상 bytes를 반환하거나 예외를 던짐 — 절대 None을 반환하지 않음.
     (이전 버전은 rate-limit 재시도가 outer for-range를 다 써버리면 루프가 그냥
     끝나버려 암묵적으로 None을 반환하는 버그가 있었음 — pcm_list에 None이 섞여
-    나중에 merge_to_mp3에서 TypeError로 터짐)"""
+    나중에 merge_to_mp3에서 TypeError로 터짐)
+    구글 TTS는 500 INTERNAL 같은 일시적 서버 오류가 몇 분씩 이어지는 경우가 있어
+    (알려진 불안정성), 재시도 한도를 넉넉하게 잡아 어지간한 일시 장애는 사람이
+    다시 누르지 않아도 자동으로 버텨내도록 함."""
+    MAX_SERVER_RETRIES = 20  # 서버 오류·rate limit 재시도 한도 (최악의 경우 최대 약 20분 대기)
     rate_limit_retries = 0
     other_retries = 0
     config_kwargs = dict(
@@ -383,43 +387,82 @@ def call_tts_single(client, script, voice_name, tts_model, retry=3, status=None,
             is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
             is_server_err = ("500" in msg or "503" in msg or "INTERNAL" in msg
                               or "UNAVAILABLE" in msg or "DEADLINE_EXCEEDED" in msg)
-            if (is_rate_limit or is_server_err) and rate_limit_retries < 10:
+            if (is_rate_limit or is_server_err) and rate_limit_retries < MAX_SERVER_RETRIES:
                 rate_limit_retries += 1
-                wait_s = 60 if is_rate_limit else 15
+                wait_s = 60 if is_rate_limit else 20
                 reason = "API 분당 요청 제한에 걸림" if is_rate_limit else "구글 서버 일시 오류"
                 if status is not None:
-                    status.markdown(f"⏳ {reason}. {wait_s}초 대기 후 재시도 ({rate_limit_retries}/10)...")
+                    status.markdown(f"⏳ {reason}. {wait_s}초 대기 후 재시도 ({rate_limit_retries}/{MAX_SERVER_RETRIES})...")
                 time.sleep(wait_s)
                 continue
             other_retries += 1
             if other_retries < retry:
-                time.sleep(3)
+                if status is not None:
+                    status.markdown(f"⏳ 알 수 없는 오류로 재시도 중... ({other_retries}/{retry}) — {msg[:80]}")
+                time.sleep(10)
                 continue
             raise e
 
 
-PROGRESS_FILE = "progress.pkl"
+PROGRESS_DIR  = "progress_chunks"
+PROGRESS_META = "progress_meta.pkl"
 
-def save_progress(pcm_list, done, chapter, chunk_meta=None):
-    """진행상황을 파일로 저장"""
-    with open(PROGRESS_FILE, 'wb') as f:
-        pickle.dump({'pcm_list': pcm_list, 'done': done, 'chapter': chapter,
-                     'chunk_meta': chunk_meta or []}, f)
+# ─────────────────────────────────────────
+# 예전 방식은 청크 하나를 만들 때마다 "지금까지 만든 오디오 전체"를 통째로
+# 다시 pickle로 저장했음 → 챕터가 길어질수록 저장 시간이 계속 늘어나서
+# 뒤로 갈수록 화면이 멈춘 것처럼 느려지는 원인이 됨 (긴 챕터에서 생성이
+# 끝까지 마무리되지 못하고 멈추는 현상의 주범).
+# 지금은 새로 만든 조각(오디오 또는 무음) 하나만 파일로 추가 저장하고,
+# 아주 작은 메타 정보만 pickle로 갱신 → 저장 속도가 챕터 길이와 무관하게
+# 항상 일정함.
+# ─────────────────────────────────────────
+def save_progress_chunk(save_idx: int, pcm: bytes, meta_entry: dict, done: int, chapter: str):
+    os.makedirs(PROGRESS_DIR, exist_ok=True)
+    with open(os.path.join(PROGRESS_DIR, f"chunk_{save_idx:05d}.pcm"), "wb") as f:
+        f.write(pcm)
+    with open(os.path.join(PROGRESS_DIR, f"chunk_{save_idx:05d}.meta"), "wb") as f:
+        pickle.dump(meta_entry, f)
+    with open(PROGRESS_META, "wb") as f:
+        pickle.dump({"done": done, "save_count": save_idx + 1, "chapter": chapter}, f)
+
 
 def load_progress():
     """저장된 진행상황 로드"""
-    if os.path.exists(PROGRESS_FILE):
+    if not os.path.exists(PROGRESS_META):
+        return None
+    try:
+        with open(PROGRESS_META, "rb") as f:
+            meta = pickle.load(f)
+    except Exception:
+        return None
+    pcm_list, chunk_meta = [], []
+    save_count = meta.get("save_count", 0)
+    for i in range(save_count):
         try:
-            with open(PROGRESS_FILE, 'rb') as f:
-                return pickle.load(f)
-        except:
-            pass
-    return None
+            with open(os.path.join(PROGRESS_DIR, f"chunk_{i:05d}.pcm"), "rb") as f:
+                pcm_list.append(f.read())
+            with open(os.path.join(PROGRESS_DIR, f"chunk_{i:05d}.meta"), "rb") as f:
+                chunk_meta.append(pickle.load(f))
+        except Exception:
+            # 파일이 없거나 손상됨 → 그 지점까지만 인정하고 나머지는 다시 생성
+            meta["save_count"] = i
+            meta["done"] = sum(1 for m in chunk_meta if m.get('kind') == 'audio')
+            break
+    meta["pcm_list"] = pcm_list
+    meta["chunk_meta"] = chunk_meta
+    return meta
+
 
 def clear_progress():
     """진행상황 파일 삭제"""
-    if os.path.exists(PROGRESS_FILE):
-        os.remove(PROGRESS_FILE)
+    if os.path.exists(PROGRESS_META):
+        os.remove(PROGRESS_META)
+    if os.path.isdir(PROGRESS_DIR):
+        for fn in os.listdir(PROGRESS_DIR):
+            try:
+                os.remove(os.path.join(PROGRESS_DIR, fn))
+            except Exception:
+                pass
 
 
 def generate_silence(seconds):
@@ -455,7 +498,9 @@ def merge_to_mp3(pcm_list):
     encoder.set_channels(1)
     encoder.set_quality(2)
     mp3_data = encoder.encode(b"".join(pcm_list))
-    return mp3_data + encoder.flush()
+    # lameenc는 bytearray를 반환함 — st.audio는 bytearray를 받아들이지 않아
+    # "Invalid binary data format" 오류가 나므로 항상 순수 bytes로 변환
+    return bytes(mp3_data) + bytes(encoder.flush())
 
 
 def pcm_duration_seconds(pcm_list):
@@ -1385,18 +1430,27 @@ if 'tagged_script' in st.session_state:
         client     = make_client(api_key)
         progress   = st.progress(0)
         status     = st.empty()
-        pcm_list   = list((saved_prog or {}).get('pcm_list',[])) if resume_from > 0 else []
-        chunk_meta = list((saved_prog or {}).get('chunk_meta',[])) if resume_from > 0 else []
+        if resume_from > 0:
+            pcm_list   = list((saved_prog or {}).get('pcm_list',[]))
+            chunk_meta = list((saved_prog or {}).get('chunk_meta',[]))
+        else:
+            pcm_list, chunk_meta = [], []
 
         # 저장된 진행상황에 손상된(None 등) 청크가 섞여 있으면 그 지점부터 다시 생성
         for i, p in enumerate(pcm_list):
             if not isinstance(p, (bytes, bytearray)):
                 pcm_list = pcm_list[:i]
                 chunk_meta = chunk_meta[:i]
-                resume_from = i
-                st.warning(f"⚠️ 저장된 {i+1}번째 청크 데이터가 손상되어 그 지점부터 다시 생성합니다.")
+                resume_from = sum(1 for m in chunk_meta if m.get('kind') == 'audio')
+                st.warning(f"⚠️ 저장된 {i+1}번째 조각 데이터가 손상되어 그 지점부터 다시 생성합니다.")
                 break
 
+        # 이미 저장된 결과물에 포함된 무음(챕터 제목 뒤 정적) 개수 — 이어서
+        # 생성할 때 같은 제목 세그먼트를 다시 지나가며 중복으로 추가하지 않도록
+        # 그 개수만큼 건너뜀
+        silences_pending_skip = sum(1 for m in chunk_meta if m.get('kind') == 'silence')
+
+        save_idx   = len(pcm_list)  # 다음에 저장할 조각의 파일 인덱스
         error_flag = False
         done       = resume_from
         chunk_idx  = 0
@@ -1419,20 +1473,29 @@ if 'tagged_script' in st.session_state:
                     script = build_single_speaker_script(chunk, voice_hint)
                     seed   = SEED_BASE + chunk_idx
                     pcm    = call_tts_single(client, script, voice, tts_model, status=status, seed=seed)
+                    meta_entry = {'kind':'audio', 'speaker':seg['speaker'],
+                                   'voice':voice, 'script':script, 'seed':seed}
                     pcm_list.append(pcm)
-                    chunk_meta.append({'kind':'audio', 'speaker':seg['speaker'],
-                                        'voice':voice, 'script':script, 'seed':seed})
+                    chunk_meta.append(meta_entry)
                     done += 1
+                    save_progress_chunk(save_idx, pcm, meta_entry, done, chapter_name)
+                    save_idx += 1
                     chunk_idx += 1
-                    save_progress(list(pcm_list), done, chapter_name, list(chunk_meta))
                 except Exception as e:
                     st.error(f"❌ [{seg['speaker']}] {e}")
                     st.info(f"💾 {done}청크까지 저장됨. [▶️ 이어서 생성]으로 재시작하세요.")
                     error_flag = True
                     break
             if seg['is_title'] and not error_flag:
-                pcm_list.append(generate_silence(title_pause))
-                chunk_meta.append({'kind':'silence', 'seconds':title_pause})
+                if silences_pending_skip > 0:
+                    silences_pending_skip -= 1
+                else:
+                    silence_pcm = generate_silence(title_pause)
+                    meta_entry  = {'kind':'silence', 'seconds':title_pause}
+                    pcm_list.append(silence_pcm)
+                    chunk_meta.append(meta_entry)
+                    save_progress_chunk(save_idx, silence_pcm, meta_entry, done, chapter_name)
+                    save_idx += 1
             if error_flag:
                 break
 
