@@ -26,7 +26,8 @@ def make_client(api_key: str) -> genai.Client:
 # 상수
 # ═══════════════════════════════════════════
 SAMPLE_RATE     = 24000
-MAX_CHUNK_CHARS = 900   # TTS 1회 호출당 최대 글자수 (길수록 뒷부분에 잡음/에코 발생 위험 ↑)
+MAX_CHUNK_CHARS = 4000  # TTS 1회 호출당 최대 글자수. 짧을수록 API 호출 수가 늘어 분당 요청
+                        # 제한에 훨씬 자주 걸림 — 슬라이더로 필요시 낮출 수 있음
 SEED_BASE       = 7     # 생성 시 seed 고정 → 목소리 톤이 매 호출마다 랜덤하게 튀는 것을 완화 (구글 TTS의 알려진 불안정성)
 CONFIG_FILE     = "config.json"
 
