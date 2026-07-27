@@ -16,7 +16,8 @@ IS_CLOUD = os.environ.get('HOME', '') == '/home/appuser'
 from google import genai
 from google.genai import types
 
-REQUEST_TIMEOUT_MS = 120_000  # 요청 하나가 응답 없이 무한정 매달리는 것 방지 (2분)
+REQUEST_TIMEOUT_MS = 300_000  # 요청 하나가 응답 없이 무한정 매달리는 것 방지 (5분).
+                               # 청크가 길수록(최대 4000자) 처리 시간도 길어지므로 여유있게 잡음
 
 def make_client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key,
@@ -387,7 +388,8 @@ def call_tts_single(client, script, voice_name, tts_model, retry=5, status=None,
             msg = str(e)
             is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
             is_server_err = ("500" in msg or "503" in msg or "INTERNAL" in msg
-                              or "UNAVAILABLE" in msg or "DEADLINE_EXCEEDED" in msg)
+                              or "UNAVAILABLE" in msg or "DEADLINE_EXCEEDED" in msg
+                              or "timed out" in msg.lower() or "timeout" in msg.lower())
             if (is_rate_limit or is_server_err) and rate_limit_retries < MAX_SERVER_RETRIES:
                 rate_limit_retries += 1
                 wait_s = 60 if is_rate_limit else 20
@@ -417,14 +419,16 @@ PROGRESS_META = "progress_meta.pkl"
 # 아주 작은 메타 정보만 pickle로 갱신 → 저장 속도가 챕터 길이와 무관하게
 # 항상 일정함.
 # ─────────────────────────────────────────
-def save_progress_chunk(save_idx: int, pcm: bytes, meta_entry: dict, done: int, chapter: str):
+def save_progress_chunk(save_idx: int, pcm: bytes, meta_entry: dict, done: int, chapter: str,
+                         max_chunk_chars: int = None):
     os.makedirs(PROGRESS_DIR, exist_ok=True)
     with open(os.path.join(PROGRESS_DIR, f"chunk_{save_idx:05d}.pcm"), "wb") as f:
         f.write(pcm)
     with open(os.path.join(PROGRESS_DIR, f"chunk_{save_idx:05d}.meta"), "wb") as f:
         pickle.dump(meta_entry, f)
     with open(PROGRESS_META, "wb") as f:
-        pickle.dump({"done": done, "save_count": save_idx + 1, "chapter": chapter}, f)
+        pickle.dump({"done": done, "save_count": save_idx + 1, "chapter": chapter,
+                     "max_chunk_chars": max_chunk_chars}, f)
 
 
 def load_progress():
@@ -859,9 +863,13 @@ with col_reset:
 
 st.divider()
 
-chapter_name = st.text_input("챕터명 (파일명용)", value="",
+chapter_default = "" if IS_CLOUD else cfg.get("chapter_name", "")
+chapter_name = st.text_input("챕터명 (파일명용)", value=chapter_default,
                               placeholder="예: chapter_01",
                               key="chapter_name", help="저장 파일명에 사용됩니다")
+if not IS_CLOUD and chapter_name != cfg.get("chapter_name", ""):
+    cfg["chapter_name"] = chapter_name
+    save_config(cfg)
 
 # ══════════════════════════════════════════
 # STEP 1: 원고 입력 & 품질 검사
@@ -1399,17 +1407,29 @@ if 'tagged_script' in st.session_state:
     st.markdown(step_header("4", "오디오 제작",
                 "생성 완료 후 자동으로 프로젝트명으로 저장"), unsafe_allow_html=True)
 
-    segs_raw = group_into_segments(lines)
-    segs = merge_segments_by_voice(segs_raw, speakers)
-    total_chunks = sum(len(chunk_segment(s['lines'], max_chunk_chars)) for s in segs)
-    saved_calls  = sum(len(chunk_segment(s['lines'], max_chunk_chars)) for s in segs_raw) - total_chunks
-    st.caption(
-        f"세그먼트 {len(segs_raw)}개 → 병합 {len(segs)}개  |  "
-        f"청크 {total_chunks}개 (최대 {max_chunk_chars}자)  |  API 절감 {saved_calls}회  |  {tts_model}"
-    )
-
     saved_prog  = load_progress()
     has_progress = saved_prog is not None and saved_prog.get('chapter') == chapter_name
+
+    # 이어서 생성할 때는 저장 당시 사용한 청크 크기를 그대로 써야 오디오-텍스트
+    # 정렬이 깨지지 않음 — 슬라이더를 바꿔도 이미 만든 부분은 그대로 재사용됨
+    if has_progress and saved_prog.get('max_chunk_chars'):
+        effective_chunk_chars = saved_prog['max_chunk_chars']
+        if effective_chunk_chars != max_chunk_chars:
+            st.info(f"ℹ️ 이전 작업은 청크 {effective_chunk_chars}자 기준으로 저장돼 있어, "
+                    f"이어서 생성 시 그 값을 그대로 사용합니다 (현재 슬라이더: {max_chunk_chars}자 — "
+                    f"'처음부터'를 누르면 새 값이 적용됩니다).")
+    else:
+        effective_chunk_chars = max_chunk_chars
+
+    segs_raw = group_into_segments(lines)
+    segs = merge_segments_by_voice(segs_raw, speakers)
+    total_chunks = sum(len(chunk_segment(s['lines'], effective_chunk_chars)) for s in segs)
+    saved_calls  = sum(len(chunk_segment(s['lines'], effective_chunk_chars)) for s in segs_raw) - total_chunks
+    st.caption(
+        f"세그먼트 {len(segs_raw)}개 → 병합 {len(segs)}개  |  "
+        f"청크 {total_chunks}개 (최대 {effective_chunk_chars}자)  |  API 절감 {saved_calls}회  |  {tts_model}"
+    )
+
     if has_progress:
         done_so_far = saved_prog.get('done', 0)
         st.warning(f"⏸️ 이전 작업: {done_so_far}/{total_chunks} 청크에서 중단됨")
@@ -1458,7 +1478,7 @@ if 'tagged_script' in st.session_state:
 
         for seg in segs:
             voice = get_voice_for_speaker(seg['speaker'], speakers)
-            chunks = chunk_segment(seg['lines'], max_chunk_chars)
+            chunks = chunk_segment(seg['lines'], effective_chunk_chars)
             for chunk in chunks:
                 if chunk_idx < resume_from:
                     chunk_idx += 1
@@ -1479,7 +1499,7 @@ if 'tagged_script' in st.session_state:
                     pcm_list.append(pcm)
                     chunk_meta.append(meta_entry)
                     done += 1
-                    save_progress_chunk(save_idx, pcm, meta_entry, done, chapter_name)
+                    save_progress_chunk(save_idx, pcm, meta_entry, done, chapter_name, effective_chunk_chars)
                     save_idx += 1
                     chunk_idx += 1
                 except Exception as e:
@@ -1495,7 +1515,7 @@ if 'tagged_script' in st.session_state:
                     meta_entry  = {'kind':'silence', 'seconds':title_pause}
                     pcm_list.append(silence_pcm)
                     chunk_meta.append(meta_entry)
-                    save_progress_chunk(save_idx, silence_pcm, meta_entry, done, chapter_name)
+                    save_progress_chunk(save_idx, silence_pcm, meta_entry, done, chapter_name, effective_chunk_chars)
                     save_idx += 1
             if error_flag:
                 break
